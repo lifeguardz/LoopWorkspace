@@ -27,24 +27,36 @@ Never write patches by hand with fake commit hashes.
 
 ### Proper Method:
 
+**CRITICAL**: Generate patches from the **workspace root**, NOT from within the submodule.
+
 ```bash
-# 1. Enter the Loop submodule
-cd LoopWorkspace/Loop
+# 1. Ensure submodules are initialized
+cd LoopWorkspace
+git submodule update --init --recursive
 
-# 2. Make your code changes
-# Edit files in Loop/WatchApp Extension/, Loop/Loop/, etc.
+# 2. Enter the Loop submodule and make changes
+cd Loop
+# ... edit files in Loop/WatchApp Extension/, Loop/Loop/, etc. ...
 
-# 3. Generate the patch from within the submodule
-git diff > ../patches/descriptive-name.patch
-
-# 4. Return to workspace root and commit
+# 3. Return to workspace root and generate patch from there
 cd ..
+git diff Loop/ > patches/descriptive-name.patch
+
+# 4. Verify paths are correct (should start with Loop/)
+head -5 patches/descriptive-name.patch
+
+# 5. Commit and push
 git add patches/descriptive-name.patch
 git commit -m "Add: description of your change"
 git push origin main
 ```
 
-**Why this works**: `git diff` generates proper unified diff format with real commit hashes and correct line numbers.
+**Why this works**: 
+- `git diff Loop/` generates proper unified diff format with real commit hashes
+- Paths include `Loop/` prefix, which is required for CI/CD to find the files
+- CI/CD runs `git apply` from workspace root, so paths must be workspace-relative
+
+**⚠️ WARNING**: If you generate from within the submodule (`cd Loop && git diff`), paths will be missing the `Loop/` prefix and CI/CD will fail with "No such file or directory".
 
 ---
 

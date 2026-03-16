@@ -1,7 +1,7 @@
-diff --git a/Common/Models/SetBolusUserInfo.swift b/Common/Models/SetBolusUserInfo.swift
+diff --git a/Loop/Common/Models/SetBolusUserInfo.swift b/Common/Models/SetBolusUserInfo.swift
 index a12f7c2e..c25f1793 100644
---- a/Common/Models/SetBolusUserInfo.swift
-+++ b/Common/Models/SetBolusUserInfo.swift
+--- a/Loop/Common/Models/SetBolusUserInfo.swift
++++ b/Loop/Common/Models/SetBolusUserInfo.swift
 @@ -16,6 +16,8 @@ struct SetBolusUserInfo {
      let contextDate: Date?
      let carbEntry: NewCarbEntry?
@@ -29,10 +29,10 @@ index a12f7c2e..c25f1793 100644
  
          return raw
      }
-diff --git a/Common/Models/WatchContext.swift b/Common/Models/WatchContext.swift
+diff --git a/Loop/Common/Models/WatchContext.swift b/Common/Models/WatchContext.swift
 index 3ce3adeb..64a2fe39 100644
---- a/Common/Models/WatchContext.swift
-+++ b/Common/Models/WatchContext.swift
+--- a/Loop/Common/Models/WatchContext.swift
++++ b/Loop/Common/Models/WatchContext.swift
 @@ -44,6 +44,7 @@ final class WatchContext: RawRepresentable {
      var cob: Double?
      var iob: Double?
@@ -57,10 +57,10 @@ index 3ce3adeb..64a2fe39 100644
          raw["r"] = reservoir
          raw["rbo"] = recommendedBolusDose
          raw["pce"] = potentialCarbEntry?.rawValue
-diff --git a/Loop/Managers/WatchDataManager.swift b/Loop/Managers/WatchDataManager.swift
+diff --git a/Loop/Loop/Managers/WatchDataManager.swift b/Loop/Managers/WatchDataManager.swift
 index bac60b71..21a8ed22 100644
---- a/Loop/Managers/WatchDataManager.swift
-+++ b/Loop/Managers/WatchDataManager.swift
+--- a/Loop/Loop/Managers/WatchDataManager.swift
++++ b/Loop/Loop/Managers/WatchDataManager.swift
 @@ -307,6 +307,19 @@ final class WatchDataManager: NSObject {
                  updateGroup.leave()
              }
@@ -113,10 +113,10 @@ index bac60b71..21a8ed22 100644
              }
          }
  
-diff --git a/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
+diff --git a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
 index f7aa0b02..321a5076 100644
---- a/WatchApp Extension/Controllers/ChartHUDController.swift	
-+++ b/WatchApp Extension/Controllers/ChartHUDController.swift	
+--- a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift	
++++ b/Loop/WatchApp Extension/Controllers/ChartHUDController.swift	
 @@ -51,6 +51,7 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
      private let log = OSLog(category: "ChartHUDController")
      private var hasInitialActivation = false
@@ -165,10 +165,10 @@ index f7aa0b02..321a5076 100644
      }
  
      @IBAction func didTapOnChart(_ sender: Any) {
-diff --git a/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
+diff --git a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
 index 6c77afd7..bc89ed17 100644
---- a/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
-+++ b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
+--- a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
++++ b/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
 @@ -19,6 +19,14 @@ extension WatchContext {
          return HKQuantity(unit: .internationalUnit(), doubleValue: value)
      }
@@ -184,10 +184,10 @@ index 6c77afd7..bc89ed17 100644
      var activeCarbohydrates: HKQuantity? {
          guard let value = cob else {
              return nil
-diff --git a/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
+diff --git a/Loop/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
 index 9505a5db..70ef198d 100644
---- a/WatchApp Extension/Localizable.xcstrings	
-+++ b/WatchApp Extension/Localizable.xcstrings	
+--- a/Loop/WatchApp Extension/Localizable.xcstrings	
++++ b/Loop/WatchApp Extension/Localizable.xcstrings	
 @@ -678,6 +678,131 @@
          }
        }
@@ -320,10 +320,10 @@ index 9505a5db..70ef198d 100644
      "Add Carb Entry" : {
        "comment" : "Title of the user activity for adding carbs",
        "localizations" : {
-diff --git a/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift b/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift
+diff --git a/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift b/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift
 index 0cc21ca5..467a1a60 100644
---- a/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift	
-+++ b/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift	
+--- a/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift	
++++ b/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift	
 @@ -26,6 +26,7 @@ final class CarbAndBolusFlowViewModel: ObservableObject {
      @Published var recommendedBolusAmount: Double?
      @Published var bolusPickerValues: BolusPickerValues
@@ -341,10 +341,10 @@ index 0cc21ca5..467a1a60 100644
          do {
              try WCSession.default.sendBolusMessage(bolus) { [weak self] (error) in
                  DispatchQueue.main.async {
-diff --git a/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift b/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift
+diff --git a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift b/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift
 index 4c01e5c4..9615144c 100644
---- a/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift	
-+++ b/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift	
+--- a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift	
++++ b/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift	
 @@ -13,6 +13,7 @@ import LoopKit
  
  struct BolusInput: View {
@@ -394,10 +394,10 @@ index 4c01e5c4..9615144c 100644
  
      private var recommendedAmountLabel: some View {
          recommendedAmountLabelText
-diff --git a/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift b/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift
+diff --git a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift b/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift
 index 0c27958f..7fd5484f 100644
---- a/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift	
-+++ b/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift	
+--- a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift	
++++ b/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift	
 @@ -110,6 +110,7 @@ extension CarbAndBolusFlow {
              } else {
                  BolusInput(

@@ -1,15 +1,15 @@
-diff --git a/Loop/Common/Base.lproj/Intents.intentdefinition b/Common/Base.lproj/Intents.intentdefinition
-index dcaa89bc..f5f20f88 100644
+diff --git a/Loop/Common/Base.lproj/Intents.intentdefinition b/Loop/Common/Base.lproj/Intents.intentdefinition
+index dcaa89bc..fd492a2b 100644
 --- a/Loop/Common/Base.lproj/Intents.intentdefinition
 +++ b/Loop/Common/Base.lproj/Intents.intentdefinition
-@@ -188,9 +188,201 @@
- 			<string>I4OZy8</string>
- 			<key>INIntentType</key>
- 			<string>Custom</string>
--			<key>INIntentVerb</key>
--			<string>Do</string>
-+		<key>INIntentVerb</key>
-+		<string>Do</string>
+@@ -188,9 +188,195 @@
+ 		<string>I4OZy8</string>
+ 		<key>INIntentType</key>
+ 		<string>Custom</string>
+-		<key>INIntentVerb</key>
+-		<string>Do</string>
++	<key>INIntentVerb</key>
++	<string>Do</string>
 +	</dict>
 +	<dict>
 +		<key>INIntentCategory</key>
@@ -87,8 +87,6 @@ index dcaa89bc..f5f20f88 100644
 +						<string>Primary</string>
 +					</dict>
 +				</array>
-+				<key>INIntentParameterSupportsResolution</key>
-+				<true/>
 +				<key>INIntentParameterTag</key>
 +				<integer>1</integer>
 +				<key>INIntentParameterType</key>
@@ -123,8 +121,6 @@ index dcaa89bc..f5f20f88 100644
 +						<string>Primary</string>
 +					</dict>
 +				</array>
-+				<key>INIntentParameterSupportsResolution</key>
-+				<true/>
 +				<key>INIntentParameterTag</key>
 +				<integer>2</integer>
 +				<key>INIntentParameterType</key>
@@ -154,8 +150,6 @@ index dcaa89bc..f5f20f88 100644
 +						<string>Primary</string>
 +					</dict>
 +				</array>
-+				<key>INIntentParameterSupportsResolution</key>
-+				<true/>
 +				<key>INIntentParameterTag</key>
 +				<integer>3</integer>
 +				<key>INIntentParameterType</key>
@@ -193,7 +187,7 @@ index dcaa89bc..f5f20f88 100644
 +					<string>continueInApp</string>
 +				</dict>
 +			</array>
- 		</dict>
+ 	</dict>
 +		<key>INIntentTitle</key>
 +		<string>Bolus</string>
 +		<key>INIntentTitleID</key>
@@ -206,7 +200,7 @@ index dcaa89bc..f5f20f88 100644
  	</array>
  	<key>INTypes</key>
  	<array/>
-diff --git a/Loop/Common/Extensions/UserDefaults+LoopIntents.swift b/Common/Extensions/UserDefaults+LoopIntents.swift
+diff --git a/Loop/Common/Extensions/UserDefaults+LoopIntents.swift b/Loop/Common/Extensions/UserDefaults+LoopIntents.swift
 index 07082d06..38fa555c 100644
 --- a/Loop/Common/Extensions/UserDefaults+LoopIntents.swift
 +++ b/Loop/Common/Extensions/UserDefaults+LoopIntents.swift
@@ -234,7 +228,7 @@ index 07082d06..38fa555c 100644
 +    }
  }
  
-diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop Intent Extension/IntentHandler.swift
+diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop/Loop Intent Extension/IntentHandler.swift
 index 20c293a0..d6f422cf 100644
 --- a/Loop/Loop Intent Extension/IntentHandler.swift	
 +++ b/Loop/Loop Intent Extension/IntentHandler.swift	
@@ -294,7 +288,7 @@ index 20c293a0..d6f422cf 100644
 +        completion(BolusIntentResponse(code: .continueInApp, userActivity: nil))
 +    }
 +}
-diff --git a/Loop/Loop/Managers/DeviceDataManager.swift b/Loop/Managers/DeviceDataManager.swift
+diff --git a/Loop/Loop/Managers/DeviceDataManager.swift b/Loop/Loop/Managers/DeviceDataManager.swift
 index e928c5e2..7c16b5aa 100644
 --- a/Loop/Loop/Managers/DeviceDataManager.swift
 +++ b/Loop/Loop/Managers/DeviceDataManager.swift
@@ -325,7 +319,7 @@ index e928c5e2..7c16b5aa 100644
      }
  
      var availablePumpManagers: [PumpManagerDescriptor] {
-diff --git a/Loop/Loop/Managers/LoopDataManager.swift b/Loop/Managers/LoopDataManager.swift
+diff --git a/Loop/Loop/Managers/LoopDataManager.swift b/Loop/Loop/Managers/LoopDataManager.swift
 index c9aef285..9f9f686b 100644
 --- a/Loop/Loop/Managers/LoopDataManager.swift
 +++ b/Loop/Loop/Managers/LoopDataManager.swift

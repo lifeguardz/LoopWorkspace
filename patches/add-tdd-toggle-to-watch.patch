@@ -1,4 +1,4 @@
-diff --git a/Loop/Common/Models/WatchContext.swift b/Loop/Common/Models/WatchContext.swift
+diff --git a/Loop/Common/Models/WatchContext.swift b/Common/Models/WatchContext.swift
 index 3ce3adeb..64a2fe39 100644
 --- a/Loop/Common/Models/WatchContext.swift
 +++ b/Loop/Common/Models/WatchContext.swift
@@ -26,7 +26,7 @@ index 3ce3adeb..64a2fe39 100644
          raw["r"] = reservoir
          raw["rbo"] = recommendedBolusDose
          raw["pce"] = potentialCarbEntry?.rawValue
-diff --git a/Loop/Loop/Managers/WatchDataManager.swift b/Loop/Loop/Managers/WatchDataManager.swift
+diff --git a/Loop/Loop/Managers/WatchDataManager.swift b/Loop/Managers/WatchDataManager.swift
 index bac60b71..b074612c 100644
 --- a/Loop/Loop/Managers/WatchDataManager.swift
 +++ b/Loop/Loop/Managers/WatchDataManager.swift
@@ -51,9 +51,9 @@ index bac60b71..b074612c 100644
  
              dosingDecision.historicalGlucose = historicalGlucose
 diff --git a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
-index f7aa0b02..047bfe96 100644
---- a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift
-+++ b/Loop/WatchApp Extension/Controllers/ChartHUDController.swift
+index f7aa0b02..321a5076 100644
+--- a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift	
++++ b/Loop/WatchApp Extension/Controllers/ChartHUDController.swift	
 @@ -51,6 +51,7 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
      private let log = OSLog(category: "ChartHUDController")
      private var hasInitialActivation = false
@@ -62,23 +62,24 @@ index f7aa0b02..047bfe96 100644
      private var observers: [Any] = [] {
          didSet {
              for observer in oldValue {
-@@ -166,7 +167,14 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
+@@ -166,7 +167,15 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
  
              switch row {
              case .iob:
 -                cell.setActiveInsulin(isActiveContextStale ? nil : activeContext.activeInsulin)
-+                if isShowingTDD {
-+                    cell.setTitle(NSLocalizedString("TDD", comment: "HUD row title for TDD"))
-+                    cell.setTotalDailyDose(isActiveContextStale ? nil : activeContext.totalDailyDose)
++                if isShowingTDD, let tdd = activeContext.totalDailyDose {
++                    let insulinFormatter = QuantityFormatter(for: .internationalUnit())
++                    insulinFormatter.numberFormatter.minimumFractionDigits = 1
++                    insulinFormatter.numberFormatter.maximumFractionDigits = 1
++                    let valueString = insulinFormatter.string(from: tdd) ?? "–"
++                    cell.setDetail(String(format: NSLocalizedString("%@ U Total", comment: "The subtitle format describing total insulin"), valueString))
 +                } else {
-+                    cell.setTitle(NSLocalizedString("Active Insulin", comment: "HUD row title for IOB"))
 +                    cell.setActiveInsulin(isActiveContextStale ? nil : activeContext.activeInsulin)
 +                }
-+                cell.setIsTDDRow(true)
              case .cob:
                  cell.setActiveCarbohydrates(isActiveContextStale ? nil : activeContext.activeCarbohydrates)
              case .netBasal:
-@@ -194,11 +202,18 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
+@@ -194,11 +203,18 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
      }
  
      override func table(_ table: WKInterfaceTable, didSelectRowAt rowIndex: Int) {
@@ -101,57 +102,10 @@ index f7aa0b02..047bfe96 100644
      }
  
      @IBAction func didTapOnChart(_ sender: Any) {
-diff --git a/Loop/WatchApp Extension/Controllers/HUDRowController.swift b/WatchApp Extension/Controllers/HUDRowController.swift
-index d1c8ee5c..7227d1ba 100644
---- a/Loop/WatchApp Extension/Controllers/HUDRowController.swift
-+++ b/Loop/WatchApp Extension/Controllers/HUDRowController.swift
-@@ -14,6 +14,7 @@ class HUDRowController: NSObject, IdentifiableClass {
-     @IBOutlet private var textLabel: WKInterfaceLabel!
-     @IBOutlet private var detailTextLabel: WKInterfaceLabel!
-     @IBOutlet private var outerGroup: WKInterfaceGroup!
-+    private var isTDDRow = false
-     @IBOutlet private var bottomSeparator: WKInterfaceSeparator!
- }
- 
-@@ -22,6 +23,10 @@ extension HUDRowController {
-         textLabel.setText(title.localizedUppercase)
-     }
- 
-+    func setIsTDDRow(_ isTDD: Bool) {
-+        isTDDRow = isTDD
-+    }
-+
-     func setDetail(_ detail: String?) {
-         detailTextLabel.setText(detail ?? "–")
-     }
-@@ -53,6 +58,23 @@ extension HUDRowController {
-         setDetail(insulinFormatter.string(from: activeInsulin))
-     }
- 
-+    func setTotalDailyDose(_ totalDailyDose: HKQuantity?) {
-+        guard let totalDailyDose = totalDailyDose else {
-+            setDetail(nil)
-+            return
-+        }
-+
-+        let insulinFormatter: QuantityFormatter = {
-+            let insulinFormatter = QuantityFormatter(for: .internationalUnit())
-+            insulinFormatter.numberFormatter.minimumFractionDigits = 1
-+            insulinFormatter.numberFormatter.maximumFractionDigits = 1
-+
-+            return insulinFormatter
-+        }()
-+
-+        setDetail(insulinFormatter.string(from: totalDailyDose))
-+    }
-+
-     func setActiveCarbohydrates(_ activeCarbohydrates: HKQuantity?) {
-         guard let activeCarbohydrates = activeCarbohydrates else {
-             setDetail(nil)
 diff --git a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
 index 6c77afd7..bc89ed17 100644
---- a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
-+++ b/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
+--- a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
++++ b/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
 @@ -19,6 +19,14 @@ extension WatchContext {
          return HKQuantity(unit: .internationalUnit(), doubleValue: value)
      }
@@ -168,26 +122,134 @@ index 6c77afd7..bc89ed17 100644
          guard let value = cob else {
              return nil
 diff --git a/Loop/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
-index 9505a5db..fb5acd08 100644
---- a/Loop/WatchApp Extension/Localizable.xcstrings
-+++ b/Loop/WatchApp Extension/Localizable.xcstrings
-@@ -678,6 +678,23 @@
+index 9505a5db..70ef198d 100644
+--- a/Loop/WatchApp Extension/Localizable.xcstrings	
++++ b/Loop/WatchApp Extension/Localizable.xcstrings	
+@@ -678,6 +678,131 @@
          }
        }
      },
-+    "TDD" : {
-+      "comment" : "HUD row title for TDD (Total Daily Dose)",
++    "%@ U Total" : {
++      "comment" : "The subtitle format describing total insulin. (1: localized insulin total)",
 +      "localizations" : {
++        "ar" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ وحدة بشكل كامل"
++          }
++        },
++        "da" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ E Total"
++          }
++        },
 +        "de" : {
 +          "stringUnit" : {
 +            "state" : "translated",
-+            "value" : "TDD"
++            "value" : "%@ IE gesamt"
 +          }
 +        },
 +        "en" : {
 +          "stringUnit" : {
 +            "state" : "translated",
-+            "value" : "TDD"
++            "value" : "%@ U Total"
++          }
++        },
++        "es" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U Totales"
++          }
++        },
++        "fi" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U yhteensä"
++          }
++        },
++        "fr" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U total"
++          }
++        },
++        "he" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U סה״כ"
++          }
++        },
++        "it" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U Totali"
++          }
++        },
++        "ja" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "計 %@ 単位"
++          }
++        },
++        "nb" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ E Totalt"
++          }
++        },
++        "nl" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ E Totaal"
++          }
++        },
++        "pl" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ J łącznie"
++          }
++        },
++        "pt-BR" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U Total"
++          }
++        },
++        "ro" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U total"
++          }
++        },
++        "ru" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ всего ед"
++          }
++        },
++        "sv" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ E totalt"
++          }
++        },
++        "tr" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "Toplam %@ Ü"
++          }
++        },
++        "vi" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ U Tổng cộng"
++          }
++        },
++        "zh-Hans" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "%@ 单位 总量"
 +          }
 +        }
 +      }

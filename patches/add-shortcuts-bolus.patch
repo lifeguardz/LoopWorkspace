@@ -228,7 +228,11 @@ diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop/Loop Intent E
 index 20c293a0..d6f422cf 100644
 --- a/Loop/Loop Intent Extension/IntentHandler.swift	
 +++ b/Loop/Loop Intent Extension/IntentHandler.swift	
-@@ -12,7 +12,55 @@ class IntentHandler: INExtension {
+@@ -9,6 +9,7 @@
+ import Intents
++import LoopKit
+ 
+ class IntentHandler: INExtension {
      override func handler(for intent: INIntent) -> Any {
          if intent is EnableOverridePresetIntent {
              return OverrideIntentHandler()
@@ -250,7 +254,12 @@ index 20c293a0..d6f422cf 100644
 +
 +        let bolusAmount = intent.bolusAmount as? Double ?? 0
 +        let isExternalInsulin = intent.isExternalInsulin?.boolValue ?? false
-+        let insulinType = intent.insulinType
++        let insulinTypeString = intent.insulinType
++
++        // Convert insulin type string to InsulinType enum (matching by name)
++        let insulinType: InsulinType? = insulinTypeString.flatMap { typeString in
++            InsulinType.allCases.first { $0.title.lowercased().contains(typeString.lowercased()) || $0.brandName.lowercased() == typeString.lowercased() }
++        }
 +
 +        // Validate bolus amount is positive
 +        guard bolusAmount > 0 else {
@@ -275,7 +284,7 @@ index 20c293a0..d6f422cf 100644
 +        ]
 +
 +        if let insulinType = insulinType {
-+            bolusRequest["insulinType"] = insulinType
++            bolusRequest["insulinType"] = insulinType.rawValue
 +        }
 +
 +        defaults.set(bolusRequest, forKey: "intentExtensionBolusRequest")
@@ -349,8 +358,8 @@ index c9aef285..9f9f686b 100644
 +            }
 +
 +            let isExternalInsulin = bolusRequest["isExternalInsulin"] as? Bool ?? false
-+            let insulinTypeString = bolusRequest["insulinType"] as? String
-+            let insulinType = insulinTypeString.flatMap { InsulinType(rawValue: $0) }
++            let insulinTypeRawValue = bolusRequest["insulinType"] as? Int
++            let insulinType = insulinTypeRawValue.flatMap { InsulinType(rawValue: $0) }
 +
 +            self?.logger.default("Bolus Intent: Processing bolus request of %.1f units (external: %@)", bolusAmount, String(describing: isExternalInsulin))
 +

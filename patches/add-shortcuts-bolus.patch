@@ -207,7 +207,7 @@ index dcaa89bc..f5f20f88 100644
  	<key>INTypes</key>
  	<array/>
 diff --git a/Loop/Common/Extensions/UserDefaults+LoopIntents.swift b/Common/Extensions/UserDefaults+LoopIntents.swift
-index 07082d06..31a1286c 100644
+index 07082d06..38fa555c 100644
 --- a/Loop/Common/Extensions/UserDefaults+LoopIntents.swift
 +++ b/Loop/Common/Extensions/UserDefaults+LoopIntents.swift
 @@ -14,6 +14,7 @@ extension UserDefaults {
@@ -222,7 +222,7 @@ index 07082d06..31a1286c 100644
              set(newValue, forKey: Key.IntentExtensionOverrideToSet.rawValue)
          }
      }
-+    
++
 +    // Bolus request from Shortcuts intent - stored as dictionary with bolusAmount, isExternalInsulin, insulinType, timestamp
 +    var intentExtensionBolusRequest: [String: Any]? {
 +        get {
@@ -234,90 +234,88 @@ index 07082d06..31a1286c 100644
 +    }
  }
  
-diff --git a/Loop/Loop Intent Extension/BolusIntentHandler.swift b/Loop Intent Extension/BolusIntentHandler.swift
-new file mode 100644
-index 00000000..e6f3121c
---- /dev/null
-+++ b/Loop/Loop Intent Extension/BolusIntentHandler.swift	
-@@ -0,0 +1,87 @@
-+//
-+//  BolusIntentHandler.swift
-+//  Loop Intent Extension
-+//
-+//  Created by Loop User on 3/16/26.
-+//  Copyright © 2026 LoopKit Authors. All rights reserved.
-+//
-+
-+import Foundation
-+import Intents
+diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop Intent Extension/IntentHandler.swift
+index 20c293a0..f906b812 100644
+--- a/Loop/Loop Intent Extension/IntentHandler.swift	
++++ b/Loop/Loop Intent Extension/IntentHandler.swift	
+@@ -12,7 +12,86 @@ class IntentHandler: INExtension {
+     override func handler(for intent: INIntent) -> Any {
+         if intent is EnableOverridePresetIntent {
+             return OverrideIntentHandler()
++        } else if intent is BolusIntent {
++            return BolusIntentHandler()
+         }
+         return self
+     }
+ }
 +
 +class BolusIntentHandler: NSObject, BolusIntentHandling {
 +    lazy var defaults = UserDefaults(suiteName: Bundle.main.appGroupSuiteName)
-+    
++
 +    func handle(intent: BolusIntent, completion: @escaping (BolusIntentResponse) -> Void) {
 +        guard let defaults = self.defaults else {
 +            completion(BolusIntentResponse(code: .failure, userActivity: nil))
 +            return
 +        }
-+        
++
 +        let bolusAmount = intent.bolusAmount as? Double ?? 0
 +        let isExternalInsulin = intent.isExternalInsulin?.boolValue ?? false
 +        let insulinType = intent.insulinType
-+        
++
 +        // Validate bolus amount is positive
 +        guard bolusAmount > 0 else {
 +            completion(BolusIntentResponse(code: .failure, userActivity: nil))
 +            return
 +        }
-+        
++
 +        // Get max bolus from settings
 +        let maxBolus = defaults.object(forKey: "com.loopkit.Loop.maxBolus") as? Double ?? 25.0
-+        
++
 +        // Validate bolus doesn't exceed max
 +        guard bolusAmount <= maxBolus else {
 +            completion(BolusIntentResponse(code: .failure, userActivity: nil))
 +            return
 +        }
-+        
++
 +        // Store the bolus request in UserDefaults for the main app to process
 +        var bolusRequest: [String: Any] = [
 +            "bolusAmount": bolusAmount,
 +            "isExternalInsulin": isExternalInsulin,
 +            "timestamp": Date().timeIntervalSince1970
 +        ]
-+        
++
 +        if let insulinType = insulinType {
 +            bolusRequest["insulinType"] = insulinType
 +        }
-+        
++
 +        defaults.set(bolusRequest, forKey: "intentExtensionBolusRequest")
-+        
++
 +        // Continue in app because the UserDefaults KVO doesn't work in the background
 +        completion(BolusIntentResponse(code: .continueInApp, userActivity: nil))
 +    }
-+    
++
 +    func resolveBolusAmount(for intent: BolusIntent, with completion: @escaping (BolusBolusAmountResolutionResult) -> Void) {
 +        guard let bolusAmount = intent.bolusAmount as? Double, bolusAmount > 0 else {
 +            completion(BolusBolusAmountResolutionResult.needsValue())
 +            return
 +        }
-+        
++
 +        // Get max bolus from settings
 +        let maxBolus = defaults?.object(forKey: "com.loopkit.Loop.maxBolus") as? Double ?? 25.0
-+        
++
 +        guard bolusAmount <= maxBolus else {
 +            completion(BolusBolusAmountResolutionResult.unsupported(forReason: .greaterThanMaximumValue))
 +            return
 +        }
-+        
++
 +        completion(BolusBolusAmountResolutionResult.success(with: bolusAmount))
 +    }
-+    
++
 +    func resolveIsExternalInsulin(for intent: BolusIntent, with completion: @escaping (INBooleanResolutionResult) -> Void) {
 +        // This parameter is optional, so we don't need to validate it
 +        completion(INBooleanResolutionResult.success(with: intent.isExternalInsulin?.boolValue ?? false))
 +    }
-+    
++
 +    func resolveInsulinType(for intent: BolusIntent, with completion: @escaping (INStringResolutionResult) -> Void) {
 +        // This parameter is optional for external insulin
 +        if let insulinType = intent.insulinType {
@@ -327,19 +325,6 @@ index 00000000..e6f3121c
 +        }
 +    }
 +}
-diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop Intent Extension/IntentHandler.swift
-index 20c293a0..83a8128e 100644
---- a/Loop/Loop Intent Extension/IntentHandler.swift	
-+++ b/Loop/Loop Intent Extension/IntentHandler.swift	
-@@ -12,6 +12,8 @@ class IntentHandler: INExtension {
-     override func handler(for intent: INIntent) -> Any {
-         if intent is EnableOverridePresetIntent {
-             return OverrideIntentHandler()
-+        } else if intent is BolusIntent {
-+            return BolusIntentHandler()
-         }
-         return self
-     }
 diff --git a/Loop/Loop/Managers/DeviceDataManager.swift b/Loop/Managers/DeviceDataManager.swift
 index e928c5e2..7c16b5aa 100644
 --- a/Loop/Loop/Managers/DeviceDataManager.swift

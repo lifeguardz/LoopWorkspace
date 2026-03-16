@@ -1,0 +1,221 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Loop User <user@example.com>
+Date: Mon, 16 Mar 2026 00:00:00 +0000
+Subject: [PATCH] Add TDD toggle to Apple Watch IOB row
+
+This patch adds the ability to toggle between Active Insulin (IOB) and
+Total Daily Dose (TDD) by tapping the IOB row on the Apple Watch.
+
+Changes:
+- Add TDD property to WatchContext
+- Add computed property for TDD display
+- Fetch TDD data in WatchDataManager
+- Add tap gesture handling in ChartHUDController
+- Add TDD display method in HUDRowController
+- Add TDD localization strings
+
+The toggle is non-persistent and resets to IOB on each app launch.
+
+---
+ Common/Models/WatchContext.swift                    |  6 +++-
+ Loop/Managers/WatchDataManager.swift                | 15 +++++++++-
+ WatchApp Extension/Controllers/ChartHUDController.swift | 35 +++++++++++++++++++-
+ WatchApp Extension/Controllers/HUDRowController.swift  | 15 ++++++++++
+ WatchApp Extension/Extensions/WatchContext+WatchApp.swift |  7 +++++
+ WatchApp Extension/Localizable.xcstrings               | 23 ++++++++++++++
+ 6 files changed, 79 insertions(+), 2 deletions(-)
+
+diff --git a/Common/Models/WatchContext.swift b/Common/Models/WatchContext.swift
+index 1234567..abcdefg 100644
+--- a/Common/Models/WatchContext.swift
++++ b/Common/Models/WatchContext.swift
+@@ -44,6 +44,7 @@ final class WatchContext: RawRepresentable {
+     var cob: Double?
+     var iob: Double?
+     var reservoir: Double?
++    var tdd: Double?
+     var reservoirPercentage: Double?
+     var batteryPercentage: Double?
+ 
+@@ -85,6 +86,7 @@ final class WatchContext: RawRepresentable {
+         glucoseWasUserEntered = rawValue["gue"] as? Bool
+         glucoseSyncIdentifier = rawValue["gs"] as? String
+         iob = rawValue["iob"] as? Double
++        tdd = rawValue["tdd"] as? Double
+         reservoir = rawValue["r"] as? Double
+         reservoirPercentage = rawValue["rp"] as? Double
+         batteryPercentage = rawValue["bp"] as? Double
+@@ -136,6 +138,7 @@ final class WatchContext: RawRepresentable {
+         raw["gs"] = glucoseSyncIdentifier
+         raw["iob"] = iob
+         raw["ld"] = loopLastRunDate
++        raw["tdd"] = tdd
+         raw["r"] = reservoir
+         raw["rbo"] = recommendedBolusDose
+         raw["pce"] = potentialCarbEntry?.rawValue
+
+diff --git a/Loop/Managers/WatchDataManager.swift b/Loop/Managers/WatchDataManager.swift
+index 1234567..abcdefg 100644
+--- a/Loop/Managers/WatchDataManager.swift
++++ b/Loop/Managers/WatchDataManager.swift
+@@ -297,6 +297,19 @@ final class WatchDataManager: NSObject {
+             }
+             updateGroup.leave()
+         }
++
++        // Fetch TDD for today
++        updateGroup.enter()
++        let startOfDay = Calendar.current.startOfDay(for: Date())
++        self.deviceManager.doseStore.getTotalUnitsDelivered(since: startOfDay) { (result) in
++            switch result {
++            case .success(let tddValue):
++                context.tdd = tddValue.value
++            case .failure:
++                context.tdd = nil
++            }
++            updateGroup.leave()
++        }
+ 
+         _ = updateGroup.wait(timeout: .distantFuture)
+ 
+diff --git a/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
+index 1234567..abcdefg 100644
+--- a/WatchApp Extension/Controllers/ChartHUDController.swift
++++ b/WatchApp Extension/Controllers/ChartHUDController.swift
+@@ -50,6 +50,7 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
+     private let log = OSLog(category: "ChartHUDController")
+     private var hasInitialActivation = false
+ 
++    private var isShowingTDD = false
+     private var observers: [Any] = [] {
+         didSet {
+             for observer in oldValue {
+@@ -165,7 +166,14 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
+ 
+             switch row {
+             case .iob:
+-                cell.setActiveInsulin(isActiveContextStale ? nil : activeContext.activeInsulin)
++                if isShowingTDD {
++                    cell.setTitle(NSLocalizedString("TDD", comment: "HUD row title for TDD"))
++                    cell.setTotalDailyDose(isActiveContextStale ? nil : activeContext.totalDailyDose)
++                } else {
++                    cell.setTitle(NSLocalizedString("Active Insulin", comment: "HUD row title for IOB"))
++                    cell.setActiveInsulin(isActiveContextStale ? nil : activeContext.activeInsulin)
++                }
++                cell.setIsTDDRow(true)
+             case .cob:
+                 cell.setActiveCarbohydrates(isActiveContextStale ? nil : activeContext.activeCarbohydrates)
+             case .netBasal:
+@@ -196,7 +204,14 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
+     override func table(_ table: WKInterfaceTable, didSelectRowAt rowIndex: Int) {
+         guard table == self.table else { return }
+         
+-        if case .cob? = TableRow(rawValue: rowIndex) {
++        if case .iob? = TableRow(rawValue: rowIndex) {
++            // Toggle between IOB and TDD
++            isShowingTDD.toggle()
++            // Refresh the display
++            DispatchQueue.main.async {
++                self.update()
++            }
++        } else if case .cob? = TableRow(rawValue: rowIndex) {
+             presentController(withName: CarbEntryListController.className, context: nil)
+         }
+     }
+diff --git a/WatchApp Extension/Controllers/HUDRowController.swift b/WatchApp Extension/Controllers/HUDRowController.swift
+index 1234567..abcdefg 100644
+--- a/WatchApp Extension/Controllers/HUDRowController.swift
++++ b/WatchApp Extension/Controllers/HUDRowController.swift
+@@ -14,6 +14,7 @@ class HUDRowController: NSObject, IdentifiableClass {
+     @IBOutlet private var textLabel: WKInterfaceLabel!
+     @IBOutlet private var detailTextLabel: WKInterfaceLabel!
+     @IBOutlet private var outerGroup: WKInterfaceGroup!
++    private var isTDDRow = false
+     @IBOutlet private var bottomSeparator: WKInterfaceSeparator!
+ }
+ 
+@@ -22,6 +23,10 @@ extension HUDRowController {
+         textLabel.setText(title.localizedUppercase)
+     }
+ 
++    func setIsTDDRow(_ isTDD: Bool) {
++        isTDDRow = isTDD
++    }
++
+     func setDetail(_ detail: String?) {
+         detailTextLabel.setText(detail ?? "–")
+     }
+@@ -54,6 +59,22 @@ extension HUDRowController {
+         setDetail(insulinFormatter.string(from: activeInsulin))
+     }
+ 
++    func setTotalDailyDose(_ totalDailyDose: HKQuantity?) {
++        guard let totalDailyDose = totalDailyDose else {
++            setDetail(nil)
++            return
++        }
++
++        let insulinFormatter: QuantityFormatter = {
++            let insulinFormatter = QuantityFormatter(for: .internationalUnit())
++            insulinFormatter.numberFormatter.minimumFractionDigits = 1
++            insulinFormatter.numberFormatter.maximumFractionDigits = 1
++
++            return insulinFormatter
++        }()
++
++        setDetail(insulinFormatter.string(from: totalDailyDose))
++    }
++
+     func setActiveCarbohydrates(_ activeCarbohydrates: HKQuantity?) {
+         guard let activeCarbohydrates = activeCarbohydrates else {
+             setDetail(nil)
+diff --git a/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
+index 1234567..abcdefg 100644
+--- a/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
++++ b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
+@@ -20,6 +20,13 @@ extension WatchContext {
+         return HKQuantity(unit: .internationalUnit(), doubleValue: value)
+     }
+ 
++    var totalDailyDose: HKQuantity? {
++        guard let value = tdd else {
++            return nil
++        }
++
++        return HKQuantity(unit: .internationalUnit(), doubleValue: value)
++    }
++
+     var activeCarbohydrates: HKQuantity? {
+         guard let value = cob else {
+             return nil
+
+diff --git a/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
+index 1234567..abcdefg 100644
+--- a/WatchApp Extension/Localizable.xcstrings
++++ b/WatchApp Extension/Localizable.xcstrings
+@@ -679,6 +679,29 @@
+         }
+       }
+     },
++    "TDD" : {
++      "comment" : "HUD row title for TDD (Total Daily Dose)",
++      "localizations" : {
++        "de" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "TDD"
++          }
++        },
++        "en" : {
++          "stringUnit" : {
++            "state" : "translated",
++            "value" : "TDD"
++          }
++        }
++      }
++    },
+     "Add Carb Entry" : {
+       "comment" : "Title of the user activity for adding carbs",
+       "localizations" : {
+-- 
+2.40.0

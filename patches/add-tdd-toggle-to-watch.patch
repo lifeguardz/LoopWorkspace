@@ -1,7 +1,7 @@
-diff --git a/Common/Models/WatchContext.swift b/Common/Models/WatchContext.swift
+diff --git a/Loop/Common/Models/WatchContext.swift b/Loop/Common/Models/WatchContext.swift
 index 3ce3adeb..64a2fe39 100644
---- a/Common/Models/WatchContext.swift
-+++ b/Common/Models/WatchContext.swift
+--- a/Loop/Common/Models/WatchContext.swift
++++ b/Loop/Common/Models/WatchContext.swift
 @@ -44,6 +44,7 @@ final class WatchContext: RawRepresentable {
      var cob: Double?
      var iob: Double?
@@ -26,10 +26,10 @@ index 3ce3adeb..64a2fe39 100644
          raw["r"] = reservoir
          raw["rbo"] = recommendedBolusDose
          raw["pce"] = potentialCarbEntry?.rawValue
-diff --git a/Loop/Managers/WatchDataManager.swift b/Loop/Managers/WatchDataManager.swift
+diff --git a/Loop/Loop/Managers/WatchDataManager.swift b/Loop/Loop/Managers/WatchDataManager.swift
 index bac60b71..b074612c 100644
---- a/Loop/Managers/WatchDataManager.swift
-+++ b/Loop/Managers/WatchDataManager.swift
+--- a/Loop/Loop/Managers/WatchDataManager.swift
++++ b/Loop/Loop/Managers/WatchDataManager.swift
 @@ -307,6 +307,19 @@ final class WatchDataManager: NSObject {
                  updateGroup.leave()
              }
@@ -50,10 +50,10 @@ index bac60b71..b074612c 100644
              _ = updateGroup.wait(timeout: .distantFuture)
  
              dosingDecision.historicalGlucose = historicalGlucose
-diff --git a/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
+diff --git a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
 index f7aa0b02..047bfe96 100644
---- a/WatchApp Extension/Controllers/ChartHUDController.swift	
-+++ b/WatchApp Extension/Controllers/ChartHUDController.swift	
+--- a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift
++++ b/Loop/WatchApp Extension/Controllers/ChartHUDController.swift
 @@ -51,6 +51,7 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
      private let log = OSLog(category: "ChartHUDController")
      private var hasInitialActivation = false
@@ -101,10 +101,10 @@ index f7aa0b02..047bfe96 100644
      }
  
      @IBAction func didTapOnChart(_ sender: Any) {
-diff --git a/WatchApp Extension/Controllers/HUDRowController.swift b/WatchApp Extension/Controllers/HUDRowController.swift
+diff --git a/Loop/WatchApp Extension/Controllers/HUDRowController.swift b/WatchApp Extension/Controllers/HUDRowController.swift
 index d1c8ee5c..7227d1ba 100644
---- a/WatchApp Extension/Controllers/HUDRowController.swift	
-+++ b/WatchApp Extension/Controllers/HUDRowController.swift	
+--- a/Loop/WatchApp Extension/Controllers/HUDRowController.swift
++++ b/Loop/WatchApp Extension/Controllers/HUDRowController.swift
 @@ -14,6 +14,7 @@ class HUDRowController: NSObject, IdentifiableClass {
      @IBOutlet private var textLabel: WKInterfaceLabel!
      @IBOutlet private var detailTextLabel: WKInterfaceLabel!
@@ -148,10 +148,10 @@ index d1c8ee5c..7227d1ba 100644
      func setActiveCarbohydrates(_ activeCarbohydrates: HKQuantity?) {
          guard let activeCarbohydrates = activeCarbohydrates else {
              setDetail(nil)
-diff --git a/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
+diff --git a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
 index 6c77afd7..bc89ed17 100644
---- a/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
-+++ b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
+--- a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
++++ b/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
 @@ -19,6 +19,14 @@ extension WatchContext {
          return HKQuantity(unit: .internationalUnit(), doubleValue: value)
      }
@@ -167,10 +167,10 @@ index 6c77afd7..bc89ed17 100644
      var activeCarbohydrates: HKQuantity? {
          guard let value = cob else {
              return nil
-diff --git a/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
+diff --git a/Loop/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
 index 9505a5db..fb5acd08 100644
---- a/WatchApp Extension/Localizable.xcstrings	
-+++ b/WatchApp Extension/Localizable.xcstrings	
+--- a/Loop/WatchApp Extension/Localizable.xcstrings
++++ b/Loop/WatchApp Extension/Localizable.xcstrings
 @@ -678,6 +678,23 @@
          }
        }

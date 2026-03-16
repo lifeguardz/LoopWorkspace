@@ -235,10 +235,10 @@ index 07082d06..38fa555c 100644
  }
  
 diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop Intent Extension/IntentHandler.swift
-index 20c293a0..f906b812 100644
+index 20c293a0..d6f422cf 100644
 --- a/Loop/Loop Intent Extension/IntentHandler.swift	
 +++ b/Loop/Loop Intent Extension/IntentHandler.swift	
-@@ -12,7 +12,86 @@ class IntentHandler: INExtension {
+@@ -12,7 +12,55 @@ class IntentHandler: INExtension {
      override func handler(for intent: INIntent) -> Any {
          if intent is EnableOverridePresetIntent {
              return OverrideIntentHandler()
@@ -292,37 +292,6 @@ index 20c293a0..f906b812 100644
 +
 +        // Continue in app because the UserDefaults KVO doesn't work in the background
 +        completion(BolusIntentResponse(code: .continueInApp, userActivity: nil))
-+    }
-+
-+    func resolveBolusAmount(for intent: BolusIntent, with completion: @escaping (BolusBolusAmountResolutionResult) -> Void) {
-+        guard let bolusAmount = intent.bolusAmount as? Double, bolusAmount > 0 else {
-+            completion(BolusBolusAmountResolutionResult.needsValue())
-+            return
-+        }
-+
-+        // Get max bolus from settings
-+        let maxBolus = defaults?.object(forKey: "com.loopkit.Loop.maxBolus") as? Double ?? 25.0
-+
-+        guard bolusAmount <= maxBolus else {
-+            completion(BolusBolusAmountResolutionResult.unsupported(forReason: .greaterThanMaximumValue))
-+            return
-+        }
-+
-+        completion(BolusBolusAmountResolutionResult.success(with: bolusAmount))
-+    }
-+
-+    func resolveIsExternalInsulin(for intent: BolusIntent, with completion: @escaping (INBooleanResolutionResult) -> Void) {
-+        // This parameter is optional, so we don't need to validate it
-+        completion(INBooleanResolutionResult.success(with: intent.isExternalInsulin?.boolValue ?? false))
-+    }
-+
-+    func resolveInsulinType(for intent: BolusIntent, with completion: @escaping (INStringResolutionResult) -> Void) {
-+        // This parameter is optional for external insulin
-+        if let insulinType = intent.insulinType {
-+            completion(INStringResolutionResult.success(with: insulinType))
-+        } else {
-+            completion(INStringResolutionResult.notRequired())
-+        }
 +    }
 +}
 diff --git a/Loop/Loop/Managers/DeviceDataManager.swift b/Loop/Managers/DeviceDataManager.swift

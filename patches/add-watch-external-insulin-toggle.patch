@@ -29,59 +29,12 @@ index a12f7c2e..c25f1793 100644
  
          return raw
      }
-diff --git a/Loop/Common/Models/WatchContext.swift b/Common/Models/WatchContext.swift
-index 3ce3adeb..64a2fe39 100644
---- a/Loop/Common/Models/WatchContext.swift
-+++ b/Loop/Common/Models/WatchContext.swift
-@@ -44,6 +44,7 @@ final class WatchContext: RawRepresentable {
-     var cob: Double?
-     var iob: Double?
-     var reservoir: Double?
-+    var tdd: Double?
-     var reservoirPercentage: Double?
-     var batteryPercentage: Double?
- 
-@@ -83,6 +84,7 @@ final class WatchContext: RawRepresentable {
-         glucoseWasUserEntered = rawValue["gue"] as? Bool
-         glucoseSyncIdentifier = rawValue["gs"] as? String
-         iob = rawValue["iob"] as? Double
-+        tdd = rawValue["tdd"] as? Double
-         reservoir = rawValue["r"] as? Double
-         reservoirPercentage = rawValue["rp"] as? Double
-         batteryPercentage = rawValue["bp"] as? Double
-@@ -135,6 +137,7 @@ final class WatchContext: RawRepresentable {
-         raw["gs"] = glucoseSyncIdentifier
-         raw["iob"] = iob
-         raw["ld"] = loopLastRunDate
-+        raw["tdd"] = tdd
-         raw["r"] = reservoir
-         raw["rbo"] = recommendedBolusDose
-         raw["pce"] = potentialCarbEntry?.rawValue
+
 diff --git a/Loop/Loop/Managers/WatchDataManager.swift b/Loop/Managers/WatchDataManager.swift
 index bac60b71..21a8ed22 100644
 --- a/Loop/Loop/Managers/WatchDataManager.swift
 +++ b/Loop/Loop/Managers/WatchDataManager.swift
-@@ -307,6 +307,19 @@ final class WatchDataManager: NSObject {
-                 updateGroup.leave()
-             }
- 
-+            // Fetch TDD for today
-+            updateGroup.enter()
-+            let startOfDay = Calendar.current.startOfDay(for: Date())
-+            self.deviceManager.doseStore.getTotalUnitsDelivered(since: startOfDay) { (result) in
-+                switch result {
-+                case .success(let tddValue):
-+                    context.tdd = tddValue.value
-+                case .failure:
-+                    context.tdd = nil
-+                }
-+                updateGroup.leave()
-+            }
-+
-             _ = updateGroup.wait(timeout: .distantFuture)
- 
-             dosingDecision.historicalGlucose = historicalGlucose
-@@ -384,15 +397,24 @@ final class WatchDataManager: NSObject {
+@@ -384,15 +384,24 @@ final class WatchDataManager: NSObject {
                  return
              }
  
@@ -113,217 +66,10 @@ index bac60b71..21a8ed22 100644
              }
          }
  
-diff --git a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift b/WatchApp Extension/Controllers/ChartHUDController.swift
-index f7aa0b02..321a5076 100644
---- a/Loop/WatchApp Extension/Controllers/ChartHUDController.swift	
-+++ b/Loop/WatchApp Extension/Controllers/ChartHUDController.swift	
-@@ -51,6 +51,7 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
-     private let log = OSLog(category: "ChartHUDController")
-     private var hasInitialActivation = false
- 
-+    private var isShowingTDD = false
-     private var observers: [Any] = [] {
-         didSet {
-             for observer in oldValue {
-@@ -166,7 +167,15 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
- 
-             switch row {
-             case .iob:
--                cell.setActiveInsulin(isActiveContextStale ? nil : activeContext.activeInsulin)
-+                if isShowingTDD, let tdd = activeContext.totalDailyDose {
-+                    let insulinFormatter = QuantityFormatter(for: .internationalUnit())
-+                    insulinFormatter.numberFormatter.minimumFractionDigits = 1
-+                    insulinFormatter.numberFormatter.maximumFractionDigits = 1
-+                    let valueString = insulinFormatter.string(from: tdd) ?? "–"
-+                    cell.setDetail(String(format: NSLocalizedString("%@ U Total", comment: "The subtitle format describing total insulin"), valueString))
-+                } else {
-+                    cell.setActiveInsulin(isActiveContextStale ? nil : activeContext.activeInsulin)
-+                }
-             case .cob:
-                 cell.setActiveCarbohydrates(isActiveContextStale ? nil : activeContext.activeCarbohydrates)
-             case .netBasal:
-@@ -194,11 +203,18 @@ final class ChartHUDController: HUDInterfaceController, WKCrownDelegate {
-     }
- 
-     override func table(_ table: WKInterfaceTable, didSelectRowAt rowIndex: Int) {
--        guard table == self.table, case .cob? = TableRow(rawValue: rowIndex) else {
--            return
--        }
-+        guard table == self.table else { return }
- 
--        presentController(withName: CarbEntryListController.className, context: nil)
-+        if case .iob? = TableRow(rawValue: rowIndex) {
-+            // Toggle between IOB and TDD
-+            isShowingTDD.toggle()
-+            // Refresh the display
-+            DispatchQueue.main.async {
-+                self.update()
-+            }
-+        } else if case .cob? = TableRow(rawValue: rowIndex) {
-+            presentController(withName: CarbEntryListController.className, context: nil)
-+        }
-     }
- 
-     @IBAction func didTapOnChart(_ sender: Any) {
-diff --git a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift b/WatchApp Extension/Extensions/WatchContext+WatchApp.swift
-index 6c77afd7..bc89ed17 100644
---- a/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
-+++ b/Loop/WatchApp Extension/Extensions/WatchContext+WatchApp.swift	
-@@ -19,6 +19,14 @@ extension WatchContext {
-         return HKQuantity(unit: .internationalUnit(), doubleValue: value)
-     }
- 
-+    var totalDailyDose: HKQuantity? {
-+        guard let value = tdd else {
-+            return nil
-+        }
-+
-+        return HKQuantity(unit: .internationalUnit(), doubleValue: value)
-+    }
-+
-     var activeCarbohydrates: HKQuantity? {
-         guard let value = cob else {
-             return nil
-diff --git a/Loop/WatchApp Extension/Localizable.xcstrings b/WatchApp Extension/Localizable.xcstrings
-index 9505a5db..70ef198d 100644
---- a/Loop/WatchApp Extension/Localizable.xcstrings	
-+++ b/Loop/WatchApp Extension/Localizable.xcstrings	
-@@ -678,6 +678,131 @@
-         }
-       }
-     },
-+    "%@ U Total" : {
-+      "comment" : "The subtitle format describing total insulin. (1: localized insulin total)",
-+      "localizations" : {
-+        "ar" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ وحدة بشكل كامل"
-+          }
-+        },
-+        "da" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ E Total"
-+          }
-+        },
-+        "de" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ IE gesamt"
-+          }
-+        },
-+        "en" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U Total"
-+          }
-+        },
-+        "es" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U Totales"
-+          }
-+        },
-+        "fi" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U yhteensä"
-+          }
-+        },
-+        "fr" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U total"
-+          }
-+        },
-+        "he" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U סה״כ"
-+          }
-+        },
-+        "it" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U Totali"
-+          }
-+        },
-+        "ja" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "計 %@ 単位"
-+          }
-+        },
-+        "nb" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ E Totalt"
-+          }
-+        },
-+        "nl" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ E Totaal"
-+          }
-+        },
-+        "pl" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ J łącznie"
-+          }
-+        },
-+        "pt-BR" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U Total"
-+          }
-+        },
-+        "ro" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U total"
-+          }
-+        },
-+        "ru" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ всего ед"
-+          }
-+        },
-+        "sv" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ E totalt"
-+          }
-+        },
-+        "tr" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "Toplam %@ Ü"
-+          }
-+        },
-+        "vi" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ U Tổng cộng"
-+          }
-+        },
-+        "zh-Hans" : {
-+          "stringUnit" : {
-+            "state" : "translated",
-+            "value" : "%@ 单位 总量"
-+          }
-+        }
-+      }
-+    },
-     "Add Carb Entry" : {
-       "comment" : "Title of the user activity for adding carbs",
-       "localizations" : {
 diff --git a/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift b/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift
 index 0cc21ca5..467a1a60 100644
---- a/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift	
-+++ b/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift	
+--- a/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift
++++ b/Loop/WatchApp Extension/View Models/CarbAndBolusFlowViewModel.swift
 @@ -26,6 +26,7 @@ final class CarbAndBolusFlowViewModel: ObservableObject {
      @Published var recommendedBolusAmount: Double?
      @Published var bolusPickerValues: BolusPickerValues
@@ -343,8 +89,8 @@ index 0cc21ca5..467a1a60 100644
                  DispatchQueue.main.async {
 diff --git a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift b/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift
 index 4c01e5c4..9615144c 100644
---- a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift	
-+++ b/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift	
+--- a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift
++++ b/Loop/WatchApp Extension/Views/Carb Entry & Bolus/BolusInput.swift
 @@ -13,6 +13,7 @@ import LoopKit
  
  struct BolusInput: View {
@@ -358,7 +104,7 @@ index 4c01e5c4..9615144c 100644
      var body: some View {
          VStack(spacing: 0) {
 +            deliveryModeToggle
-+            
++
              DoseVolumeInput(
                  volume: amount,
                  isEditable: isEditable,
@@ -372,7 +118,7 @@ index 4c01e5c4..9615144c 100644
              }
          }
      }
-+    
++
 +    private var deliveryModeToggle: some View {
 +        HStack(spacing: 8) {
 +            Button(action: { isExternalInsulin = false }) {
@@ -381,7 +127,7 @@ index 4c01e5c4..9615144c 100644
 +                    .foregroundColor(isExternalInsulin ? .gray : .insulin)
 +            }
 +            .buttonStyle(PlainButtonStyle())
-+            
++
 +            Button(action: { isExternalInsulin = true }) {
 +                Image(systemName: "pencil")
 +                    .font(.system(size: 20))
@@ -396,8 +142,8 @@ index 4c01e5c4..9615144c 100644
          recommendedAmountLabelText
 diff --git a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift b/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift
 index 0c27958f..7fd5484f 100644
---- a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift	
-+++ b/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift	
+--- a/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift
++++ b/Loop/WatchApp Extension/Views/Carb Entry & Bolus/CarbAndBolusFlow.swift
 @@ -110,6 +110,7 @@ extension CarbAndBolusFlow {
              } else {
                  BolusInput(

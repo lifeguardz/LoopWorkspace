@@ -225,12 +225,11 @@ index 07082d06..38fa555c 100644
  }
  
 diff --git a/Loop/Loop Intent Extension/IntentHandler.swift b/Loop/Loop Intent Extension/IntentHandler.swift
-index 20c293a0..d6f422cf 100644
+index 20c293a0..ae8b5c1f 100644
 --- a/Loop/Loop Intent Extension/IntentHandler.swift	
 +++ b/Loop/Loop Intent Extension/IntentHandler.swift	
-@@ -9,6 +9,7 @@
+@@ -9,6 +9,50 @@
  import Intents
-+import LoopKit
  
  class IntentHandler: INExtension {
      override func handler(for intent: INIntent) -> Any {
@@ -256,11 +255,6 @@ index 20c293a0..d6f422cf 100644
 +        let isExternalInsulin = intent.isExternalInsulin?.boolValue ?? false
 +        let insulinTypeString = intent.insulinType
 +
-+        // Convert insulin type string to InsulinType enum (matching by name)
-+        let insulinType: InsulinType? = insulinTypeString.flatMap { typeString in
-+            InsulinType.allCases.first { $0.title.lowercased().contains(typeString.lowercased()) || $0.brandName.lowercased() == typeString.lowercased() }
-+        }
-+
 +        // Validate bolus amount is positive
 +        guard bolusAmount > 0 else {
 +            completion(BolusIntentResponse(code: .failure, userActivity: nil))
@@ -282,9 +276,8 @@ index 20c293a0..d6f422cf 100644
 +            "isExternalInsulin": isExternalInsulin,
 +            "timestamp": Date().timeIntervalSince1970
 +        ]
-+
-+        if let insulinType = insulinType {
-+            bolusRequest["insulinType"] = insulinType.rawValue
++        if let insulinTypeString = insulinTypeString {
++            bolusRequest["insulinType"] = insulinTypeString
 +        }
 +
 +        defaults.set(bolusRequest, forKey: "intentExtensionBolusRequest")
@@ -336,7 +329,7 @@ index c9aef285..9f9f686b 100644
  
      var presetActivationObservers: [PresetActivationObserver] = []
  
-@@ -167,6 +168,44 @@ final class LoopDataManager {
+@@ -167,6 +168,46 @@ final class LoopDataManager {
              appGroup.intentExtensionOverrideToSet = nil
          })
  
@@ -358,8 +351,11 @@ index c9aef285..9f9f686b 100644
 +            }
 +
 +            let isExternalInsulin = bolusRequest["isExternalInsulin"] as? Bool ?? false
-+            let insulinTypeRawValue = bolusRequest["insulinType"] as? Int
-+            let insulinType = insulinTypeRawValue.flatMap { InsulinType(rawValue: $0) }
++            let insulinTypeString = bolusRequest["insulinType"] as? String
++            // Convert insulin type string to InsulinType enum (matching by name)
++            let insulinType: InsulinType? = insulinTypeString.flatMap { typeString in
++                InsulinType.allCases.first { $0.title.lowercased().contains(typeString.lowercased()) || $0.brandName.lowercased() == typeString.lowercased() }
++            }
 +
 +            self?.logger.default("Bolus Intent: Processing bolus request of %.1f units (external: %@)", bolusAmount, String(describing: isExternalInsulin))
 +
@@ -381,7 +377,7 @@ index c9aef285..9f9f686b 100644
          // Required for device settings in stored dosing decisions
          UIDevice.current.isBatteryMonitoringEnabled = true
  
-@@ -2315,6 +2354,7 @@ extension Notification.Name {
+@@ -2315,6 +2356,7 @@ extension Notification.Name {
      static let LoopDataUpdated = Notification.Name(rawValue: "com.loopkit.Loop.LoopDataUpdated")
      static let LoopRunning = Notification.Name(rawValue: "com.loopkit.Loop.LoopRunning")
      static let LoopCompleted = Notification.Name(rawValue: "com.loopkit.Loop.LoopCompleted")
@@ -389,4 +385,3 @@ index c9aef285..9f9f686b 100644
  }
  
  protocol LoopDataManagerDelegate: AnyObject {
-

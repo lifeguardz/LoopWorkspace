@@ -1,0 +1,545 @@
+diff --git a/Loop/View Models/CarbEntryViewModel.swift b/Loop/View Models/CarbEntryViewModel.swift
+index 37dedee3..59c7d076 100644
+--- a/Loop/View Models/CarbEntryViewModel.swift	
++++ b/Loop/View Models/CarbEntryViewModel.swift	
+@@ -82,10 +82,20 @@ final class CarbEntryViewModel: ObservableObject {
+     @Published var favoriteFoods = UserDefaults.standard.favoriteFoods
+     @Published var selectedFavoriteFoodIndex = -1
+     
++    @Published var showHealthKitImport = false
++    
+     weak var delegate: CarbEntryViewModelDelegate?
+     
+     private lazy var cancellables = Set<AnyCancellable>()
+     
++    var healthStore: HKHealthStore? {
++        return delegate?.healthStore
++    }
++    
++    var carbStore: CarbStore? {
++        return delegate?.carbStore
++    }
++    
+     /// Initalizer for when`CarbEntryView` is presented from the home screen
+     init(delegate: CarbEntryViewModelDelegate) {
+         self.delegate = delegate
+@@ -315,4 +325,14 @@ final class CarbEntryViewModel: ObservableObject {
+             }
+             .store(in: &cancellables)
+     }
++    
++    func openHealthKitImport() {
++        showHealthKitImport = true
++    }
++    
++    func handleHealthKitImportCompletion(successCount: Int) {
++        if successCount > 0 {
++            carbsQuantity = Double(successCount) * 15.0
++        }
++    }
+ }
+diff --git a/Loop/View Models/HealthKitCarbImportViewModel.swift b/Loop/View Models/HealthKitCarbImportViewModel.swift
+new file mode 100644
+index 00000000..0b0d51e1
+--- /dev/null
++++ b/Loop/View Models/HealthKitCarbImportViewModel.swift	
+@@ -0,0 +1,198 @@
++//
++//  HealthKitCarbImportViewModel.swift
++//  Loop
++//
++//  Created by LoopKit Authors.
++//  Copyright © 2026 LoopKit Authors. All rights reserved.
++//
++
++import Foundation
++import HealthKit
++import LoopKit
++import Combine
++
++final class HealthKitCarbImportViewModel: ObservableObject {
++    enum State {
++        case idle
++        case loading
++        case loaded([HealthKitCarbEntry])
++        case error(Error)
++    }
++    
++    @Published var state: State = .idle
++    @Published var selectedEntryIDs: Set<String> = []
++    @Published var isImporting: Bool = false
++    
++    private let healthStore: HKHealthStore
++    private let carbStore: CarbStore
++    private let maxEntries = 100
++    private let timeRangeHours: Double = 24
++    
++    init(healthStore: HKHealthStore, carbStore: CarbStore) {
++        self.healthStore = healthStore
++        self.carbStore = carbStore
++    }
++    
++    func fetchCarbEntries() {
++        state = .loading
++        selectedEntryIDs.removeAll()
++        
++        guard let carbType = HKQuantityType.quantityType(forIdentifier: .dietaryCarbohydrates) else {
++            state = .error(NSError.healthKitNotAvailable)
++            return
++        }
++        
++        let now = Date()
++        let startDate = now.addingTimeInterval(-timeRangeHours * 60 * 60)
++        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [.strictStartDate])
++        
++        let notFromCurrentApp = NSCompoundPredicate(notPredicateWithSubpredicate: HKQuery.predicateForObjects(from: HKSource.default()))
++        let finalPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, notFromCurrentApp])
++        
++        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
++        
++        let query = HKSampleQuery(
++            sampleType: carbType,
++            predicate: finalPredicate,
++            limit: maxEntries,
++            sortDescriptors: [sortDescriptor]
++        ) { [weak self] _, samples, error in
++            DispatchQueue.main.async {
++                if let error = error {
++                    self?.state = .error(error)
++                    return
++                }
++                
++                let entries = samples?.compactMap { sample -> HealthKitCarbEntry? in
++                    guard let quantitySample = sample as? HKQuantitySample else {
++                        return nil
++                    }
++                    
++                    let grams = sample.quantity.doubleValue(for: .gram())
++                    let sourceApp = sample.sourceRevision.source.name
++                    let foodType = sample.metadata?[HKMetadataKeyFoodType] as? String
++                    
++                    return HealthKitCarbEntry(
++                        id: sample.uuid.uuidString,
++                        date: sample.startDate,
++                        grams: grams,
++                        sourceApp: sourceApp,
++                        foodType: foodType,
++                        sample: quantitySample
++                    )
++                } ?? []
++                
++                self?.state = .loaded(entries)
++            }
++        }
++        
++        healthStore.execute(query)
++    }
++    
++    func toggleSelection(entryID: String) {
++        if selectedEntryIDs.contains(entryID) {
++            selectedEntryIDs.remove(entryID)
++        } else {
++            selectedEntryIDs.insert(entryID)
++        }
++    }
++    
++    func selectAll() {
++        if case .loaded(let entries) = state {
++            selectedEntryIDs = Set(entries.map { $0.id })
++        }
++    }
++    
++    func deselectAll() {
++        selectedEntryIDs.removeAll()
++    }
++    
++    func importSelected(completion: @escaping (Result<Int, Error>) -> Void) {
++        guard case .loaded(let entries) = state else {
++            completion(.failure(NSError.noEntriesFound))
++            return
++        }
++        
++        isImporting = true
++        
++        let entriesToImport = entries.filter { selectedEntryIDs.contains($0.id) }
++        
++        guard !entriesToImport.isEmpty else {
++            isImporting = false
++            completion(.success(0))
++            return
++        }
++        
++        var successCount = 0
++        var lastError: Error?
++        let dispatchGroup = DispatchGroup()
++        
++        for entry in entriesToImport {
++            dispatchGroup.enter()
++            
++            let newCarbEntry = NewCarbEntry(
++                date: entry.date,
++                quantity: HKQuantity(unit: .gram(), doubleValue: entry.grams),
++                startDate: entry.date,
++                foodType: entry.foodType,
++                absorptionTime: .hours(3)
++            )
++            
++            carbStore.addCarbEntry(newCarbEntry) { result in
++                switch result {
++                case .success:
++                    successCount += 1
++                case .failure(let error):
++                    lastError = error
++                }
++                dispatchGroup.leave()
++            }
++        }
++        
++        dispatchGroup.notify(queue: .main) { [weak self] in
++            self?.isImporting = false
++            if lastError != nil && successCount == 0 {
++                completion(.failure(lastError ?? NSError.importFailed))
++            } else {
++                completion(.success(successCount))
++            }
++        }
++    }
++    
++    var hasSelectedEntries: Bool {
++        !selectedEntryIDs.isEmpty
++    }
++    
++    var selectedCount: Int {
++        selectedEntryIDs.count
++    }
++}
++
++struct HealthKitCarbEntry: Identifiable, Equatable {
++    let id: String
++    let date: Date
++    let grams: Double
++    let sourceApp: String
++    let foodType: String?
++    let sample: HKQuantitySample
++}
++
++private extension NSError {
++    static let healthKitNotAvailable = NSError(
++        domain: "HealthKitCarbImport",
++        code: 1,
++        userInfo: [NSLocalizedDescriptionKey: "HealthKit is not available on this device"]
++    )
++    
++    static let noEntriesFound = NSError(
++        domain: "HealthKitCarbImport",
++        code: 2,
++        userInfo: [NSLocalizedDescriptionKey: "No carb entries found from external apps"]
++    )
++    
++    static let importFailed = NSError(
++        domain: "HealthKitCarbImport",
++        code: 3,
++        userInfo: [NSLocalizedDescriptionKey: "Failed to import carb entries"]
++    )
++}
+diff --git a/Loop/Views/CarbEntryView.swift b/Loop/Views/CarbEntryView.swift
+index 14c6b2c4..4ff1c059 100644
+--- a/Loop/Views/CarbEntryView.swift
++++ b/Loop/Views/CarbEntryView.swift
+@@ -71,6 +71,10 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
+                 mainCard
+                     .padding(.top, 8)
+                 
++                if isNewEntry {
++                    healthKitImportButton
++                }
++                
+                 continueActionButton
+                 
+                 if isNewEntry, FeatureFlags.allowExperimentalFeatures {
+@@ -87,6 +91,21 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
+             }
+         }
+         .alert(item: $viewModel.alert, content: alert(for:))
++        .sheet(isPresented: $viewModel.showHealthKitImport) {
++            if let healthStore = viewModel.healthStore,
++               let carbStore = viewModel.carbStore {
++                let importViewModel = HealthKitCarbImportViewModel(
++                    healthStore: healthStore,
++                    carbStore: carbStore
++                )
++                HealthKitCarbImportView(viewModel: importViewModel)
++                    .onDisappear {
++                        if importViewModel.selectedCount > 0 {
++                            viewModel.handleHealthKitImportCompletion(successCount: importViewModel.selectedCount)
++                        }
++                    }
++            }
++        }
+         .sheet(isPresented: $showAddFavoriteFood, onDismiss: clearExpandedRow) {
+             AddEditFavoriteFoodView(carbsQuantity: $viewModel.carbsQuantity.wrappedValue, foodType: $viewModel.foodType.wrappedValue, absorptionTime: $viewModel.absorptionTime.wrappedValue, onSave: onFavoriteFoodSave(_:))
+         }
+@@ -310,6 +329,17 @@ extension CarbEntryView {
+         .disabled(viewModel.continueButtonDisabled)
+     }
+     
++    private var healthKitImportButton: some View {
++        Button(action: viewModel.openHealthKitImport) {
++            HStack {
++                Image(systemName: "arrow.down.doc.fill")
++                Text("Import from HealthKit")
++            }
++            .foregroundColor(.accentColor)
++        }
++        .buttonStyle(ActionButtonStyle())
++        .padding(.horizontal)
++    }
+ }
+ 
+ extension CarbEntryView {
+diff --git a/Loop/Views/HealthKitCarbImportView.swift b/Loop/Views/HealthKitCarbImportView.swift
+new file mode 100644
+index 00000000..bfbe4c57
+--- /dev/null
++++ b/Loop/Views/HealthKitCarbImportView.swift
+@@ -0,0 +1,240 @@
++//
++//  HealthKitCarbImportView.swift
++//  Loop
++//
++//  Created by LoopKit Authors.
++//  Copyright © 2026 LoopKit Authors. All rights reserved.
++//
++
++import SwiftUI
++import HealthKit
++
++struct HealthKitCarbImportView: View {
++    @Environment(\.dismiss) private var dismiss
++    @ObservedObject var viewModel: HealthKitCarbImportViewModel
++    
++    @State private var showConfirmation = false
++    @State private var importResult: Result<Int, Error>?
++    
++    private let dateFormatter: DateFormatter = {
++        let formatter = DateFormatter()
++        formatter.dateStyle = .medium
++        formatter.timeStyle = .short
++        return formatter
++    }()
++    
++    var body: some View {
++        NavigationView {
++            Group {
++                switch viewModel.state {
++                case .idle:
++                    emptyStateView
++                case .loading:
++                    loadingView
++                case .loaded(let entries):
++                    contentView(entries)
++                case .error(let error):
++                    errorView(error)
++                }
++            }
++            .navigationTitle("Import from HealthKit")
++            .navigationBarTitleDisplayMode(.inline)
++            .toolbar {
++                ToolbarItem(placement: .navigationBarLeading) {
++                    Button("Cancel") {
++                        dismiss()
++                    }
++                }
++                
++                ToolbarItem(placement: .navigationBarTrailing) {
++                    Button("Import") {
++                        showConfirmation = true
++                    }
++                    .disabled(!viewModel.hasSelectedEntries || viewModel.isImporting)
++                }
++            }
++            .onAppear {
++                viewModel.fetchCarbEntries()
++            }
++            .alert("Import Carbs", isPresented: $showConfirmation) {
++                Button("Cancel", role: .cancel) { }
++                Button("Import") {
++                    performImport()
++                }
++            } message: {
++                Text("Import \(viewModel.selectedCount) carb entr\(viewModel.selectedCount == 1 ? "y" : "ies") into Loop?")
++            }
++            .alert("Import Result", isPresented: .constant(importResult != nil)) {
++                Button("OK") {
++                    if case .success = importResult {
++                        dismiss()
++                    }
++                    importResult = nil
++                }
++            } message: {
++                if let result = importResult {
++                    switch result {
++                    case .success(let count):
++                        Text("Successfully imported \(count) carb entr\(count == 1 ? "y" : "ies").")
++                    case .failure(let error):
++                        Text("Failed to import carbs: \(error.localizedDescription)")
++                    }
++                }
++            }
++        }
++    }
++    
++    @ViewBuilder
++    private var emptyStateView: some View {
++        ContentUnavailableView {
++            Label {
++                Text("No Carb Entries Found")
++            } icon: {
++                Image(systemName: "fork.knife")
++            }
++        } description: {
++            Text("No carb entries from external apps were found in the last 24 hours.")
++        }
++    }
++    
++    @ViewBuilder
++    private var loadingView: some View {
++        ProgressView("Loading carb entries...")
++            .frame(maxWidth: .infinity, maxHeight: .infinity)
++    }
++    
++    @ViewBuilder
++    private func contentView(_ entries: [HealthKitCarbEntry]) -> some View {
++        Group {
++            if entries.isEmpty {
++                emptyStateView
++            } else {
++                List {
++                    ForEach(entries) { entry in
++                        CarbEntryRow(
++                            entry: entry,
++                            isSelected: viewModel.selectedEntryIDs.contains(entry.id),
++                            dateFormatter: dateFormatter,
++                            onToggle: {
++                                viewModel.toggleSelection(entryID: entry.id)
++                            }
++                        )
++                    }
++                }
++                .listStyle(.insetGrouped)
++                
++                if viewModel.hasSelectedEntries {
++                    selectionSummaryView
++                }
++            }
++        }
++    }
++    
++    private var selectionSummaryView: some View {
++        VStack(spacing: 8) {
++            Divider()
++            
++            HStack {
++                Text("\(viewModel.selectedCount) entr\(viewModel.selectedCount == 1 ? "y" : "ies") selected")
++                    .font(.headline)
++                
++                Spacer()
++                
++                Button("Select All") {
++                    viewModel.selectAll()
++                }
++                .font(.caption)
++                
++                Button("Clear") {
++                    viewModel.deselectAll()
++                }
++                .font(.caption)
++            }
++            .padding(.horizontal)
++            .padding(.vertical, 8)
++            .background(Color(.systemBackground))
++        }
++    }
++    
++    @ViewBuilder
++    private func errorView(_ error: Error) -> some View {
++        ContentUnavailableView {
++            Label {
++                Text("Error Loading Entries")
++            } icon: {
++                Image(systemName: "exclamationmark.triangle")
++                    .foregroundColor(.critical)
++            }
++        } description: {
++            Text(error.localizedDescription)
++        } actions: {
++            Button("Retry") {
++                viewModel.fetchCarbEntries()
++            }
++        }
++    }
++    
++    private func performImport() {
++        viewModel.importSelected { result in
++            importResult = result
++        }
++    }
++}
++
++struct CarbEntryRow: View {
++    let entry: HealthKitCarbEntry
++    let isSelected: Bool
++    let dateFormatter: DateFormatter
++    let onToggle: () -> Void
++    
++    private let gramsFormatter: NumberFormatter = {
++        let formatter = NumberFormatter()
++        formatter.numberStyle = .decimal
++        formatter.maximumFractionDigits = 0
++        return formatter
++    }()
++    
++    var body: some View {
++        HStack(spacing: 12) {
++            Toggle(isOn: Binding(
++                get: { isSelected },
++                set: { _ in onToggle() }
++            )) {
++                VStack(alignment: .leading, spacing: 4) {
++                    HStack {
++                        Text("\(gramsFormatter.string(from: NSNumber(value: entry.grams)) ?? "\(Int(entry.grams))")g")
++                            .font(.title2)
++                            .fontWeight(.semibold)
++                        
++                        Spacer()
++                    }
++                    
++                    Text(dateFormatter.string(from: entry.date))
++                        .font(.caption)
++                        .foregroundColor(.secondary)
++                    
++                    if let foodType = entry.foodType, !foodType.isEmpty {
++                        Text(foodType)
++                            .font(.caption)
++                            .foregroundColor(.secondary)
++                    }
++                    
++                    Text(entry.sourceApp)
++                        .font(.caption2)
++                        .foregroundColor(.tertiary)
++                }
++            }
++            .toggleStyle(.switch)
++        }
++        .padding(.vertical, 4)
++    }
++}
++
++#Preview {
++    HealthKitCarbImportView(
++        viewModel: HealthKitCarbImportViewModel(
++            healthStore: HKHealthStore(),
++            carbStore: CarbStore()
++        )
++    )
++}

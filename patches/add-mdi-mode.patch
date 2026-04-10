@@ -1,0 +1,354 @@
+diff --git a/Loop/Loop/Extensions/DeviceDataManager+SimpleBolusViewModelDelegate.swift b/Loop/Loop/Extensions/DeviceDataManager+SimpleBolusViewModelDelegate.swift
+index 4192700e..15eb94e7 100644
+--- a/Loop/Loop/Extensions/DeviceDataManager+SimpleBolusViewModelDelegate.swift
++++ b/Loop/Loop/Extensions/DeviceDataManager+SimpleBolusViewModelDelegate.swift
+@@ -18,6 +18,10 @@ extension DeviceDataManager: SimpleBolusViewModelDelegate {
+     func enactBolus(units: Double, activationType: BolusActivationType) {
+         enactBolus(units: units, activationType: activationType) { (_) in }
+     }
++
++    func addManuallyEnteredDose(startDate: Date, units: Double, insulinType: InsulinType?) {
++        loopManager.addManuallyEnteredDose(startDate: startDate, units: units, insulinType: insulinType)
++    }
+     
+     func computeSimpleBolusRecommendation(at date: Date, mealCarbs: HKQuantity?, manualGlucose: HKQuantity?) -> BolusDosingDecision? {
+         return loopManager.generateSimpleBolusRecommendation(at: date, mealCarbs: mealCarbs, manualGlucose: manualGlucose)
+@@ -30,4 +34,8 @@ extension DeviceDataManager: SimpleBolusViewModelDelegate {
+     var suspendThreshold: HKQuantity {
+         return loopManager.settings.suspendThreshold!.quantity
+     }
++
++    var isPumpConfigured: Bool {
++        return pumpManager != nil
++    }
+ }
+diff --git a/Loop/Loop/View Controllers/StatusTableViewController.swift b/Loop/Loop/View Controllers/StatusTableViewController.swift
+index 0e14f216..e63be201 100644
+--- a/Loop/Loop/View Controllers/StatusTableViewController.swift	
++++ b/Loop/Loop/View Controllers/StatusTableViewController.swift	
+@@ -298,10 +298,10 @@ final class StatusTableViewController: LoopChartsTableViewController {
+         let isPumpOnboarded = onboardingManager.isComplete || deviceManager.pumpManager?.isOnboarded == true
+ 
+         toolbarItems![0].accessibilityLabel = NSLocalizedString("Add Meal", comment: "The label of the carb entry button")
+-        toolbarItems![0].isEnabled = isPumpOnboarded
++        toolbarItems![0].isEnabled = isPumpOnboarded || deviceManager.pumpManager == nil
+         toolbarItems![0].tintColor = UIColor.carbTintColor
+         toolbarItems![4].accessibilityLabel = NSLocalizedString("Bolus", comment: "The label of the bolus entry button")
+-        toolbarItems![4].isEnabled = isPumpOnboarded
++        toolbarItems![4].isEnabled = isPumpOnboarded || deviceManager.pumpManager == nil
+         toolbarItems![4].tintColor = UIColor.insulinTintColor
+         toolbarItems![8].accessibilityLabel = NSLocalizedString("Settings", comment: "The label of the settings button")
+         toolbarItems![8].tintColor = UIColor.secondaryLabel
+diff --git a/Loop/Loop/View Models/BolusEntryViewModel.swift b/Loop/Loop/View Models/BolusEntryViewModel.swift
+index a86f20e0..0929369f 100644
+--- a/Loop/Loop/View Models/BolusEntryViewModel.swift	
++++ b/Loop/Loop/View Models/BolusEntryViewModel.swift	
+@@ -31,6 +31,8 @@ protocol BolusEntryViewModelDelegate: AnyObject {
+     
+     func enactBolus(units: Double, activationType: BolusActivationType, completion: @escaping (_ error: Error?) -> Void)
+     
++    func addManuallyEnteredDose(startDate: Date, units: Double, insulinType: InsulinType?)
++    
+     func getGlucoseSamples(start: Date?, end: Date?, completion: @escaping (_ samples: Swift.Result<[StoredGlucoseSample], Error>) -> Void)
+ 
+     func insulinOnBoard(at date: Date, completion: @escaping (_ result: DoseStoreResult<InsulinValue>) -> Void)
+@@ -149,6 +151,16 @@ final class BolusEntryViewModel: ObservableObject {
+ 
+     var manualGlucoseSample: NewGlucoseSample?
+ 
++    var isMDIMode: Bool {
++        return !(delegate?.isPumpConfigured ?? false)
++    }
++
++    @Published var selectedInsulinType: InsulinType = .novolog
++
++    var insulinTypePickerOptions: [InsulinType] {
++        return [.novolog, .humalog, .apidra, .fiasp, .lyumjev, .afrezza]
++    }
++
+     // MARK: - Seams
+     private weak var delegate: BolusEntryViewModelDelegate?
+     private let now: () -> Date
+@@ -331,9 +343,13 @@ final class BolusEntryViewModel: ObservableObject {
+ 
+     // returns true if no errors
+     func saveAndDeliver() async -> Bool {
+-        guard delegate?.isPumpConfigured ?? false else {
+-            presentAlert(.noPumpManagerConfigured)
+-            return false
++        let mdiMode = isMDIMode
++
++        if !mdiMode {
++            guard delegate?.isPumpConfigured ?? false else {
++                presentAlert(.noPumpManagerConfigured)
++                return false
++            }
+         }
+ 
+         guard let delegate = delegate else {
+@@ -371,7 +387,12 @@ final class BolusEntryViewModel: ObservableObject {
+ 
+         // Authenticate the bolus before saving anything
+         if amountToDeliver > 0 {
+-            let message = String(format: NSLocalizedString("Authenticate to Bolus %@ Units", comment: "The message displayed during a device authentication prompt for bolus specification"), amountToDeliverString)
++            let message: String
++            if mdiMode {
++                message = String(format: NSLocalizedString("Authenticate to Log %@ Units", comment: "The message displayed during a device authentication prompt for MDI dose logging"), amountToDeliverString)
++            } else {
++                message = String(format: NSLocalizedString("Authenticate to Bolus %@ Units", comment: "The message displayed during a device authentication prompt for bolus specification"), amountToDeliverString)
++            }
+ 
+             if !(await authenticationHandler(message)) {
+                 return false
+@@ -421,9 +442,13 @@ final class BolusEntryViewModel: ObservableObject {
+ 
+         if amountToDeliver > 0 {
+             savedPreMealOverride = nil
+-            delegate.enactBolus(units: amountToDeliver, activationType: activationType, completion: { _ in
+-                self.analyticsServicesManager?.didBolus(source: "Phone", units: amountToDeliver)
+-            })
++            if mdiMode {
++                delegate.addManuallyEnteredDose(startDate: now, units: amountToDeliver, insulinType: selectedInsulinType)
++            } else {
++                delegate.enactBolus(units: amountToDeliver, activationType: activationType, completion: { _ in
++                    self.analyticsServicesManager?.didBolus(source: "Phone", units: amountToDeliver)
++                })
++            }
+         }
+         return true
+     }
+@@ -860,9 +885,19 @@ extension BolusEntryViewModel {
+         case saveAndDeliver
+         case enterBolus
+         case deliver
++        case logDose
++        case saveAndLogDose
+     }
+     
+     var actionButtonAction: ActionButtonAction {
++        if isMDIMode {
++            switch (hasDataToSave, hasBolusEntryReadyToDeliver) {
++            case (true, true): return .saveAndLogDose
++            case (true, false): return .saveWithoutBolusing
++            case (false, true): return .logDose
++            case (false, false): return .enterBolus
++            }
++        }
+         switch (hasDataToSave, hasBolusEntryReadyToDeliver) {
+         case (true, true): return .saveAndDeliver
+         case (true, false): return .saveWithoutBolusing
+diff --git a/Loop/Loop/View Models/SimpleBolusViewModel.swift b/Loop/Loop/View Models/SimpleBolusViewModel.swift
+index f803bfa5..fe2e9ba8 100644
+--- a/Loop/Loop/View Models/SimpleBolusViewModel.swift	
++++ b/Loop/Loop/View Models/SimpleBolusViewModel.swift	
+@@ -27,6 +27,8 @@ protocol SimpleBolusViewModelDelegate: AnyObject {
+     
+     func enactBolus(units: Double, activationType: BolusActivationType)
+ 
++    func addManuallyEnteredDose(startDate: Date, units: Double, insulinType: InsulinType?)
++
+     func insulinOnBoard(at date: Date, completion: @escaping (_ result: DoseStoreResult<InsulinValue>) -> Void)
+ 
+     func computeSimpleBolusRecommendation(at date: Date, mealCarbs: HKQuantity?, manualGlucose: HKQuantity?) -> BolusDosingDecision?
+@@ -36,6 +38,8 @@ protocol SimpleBolusViewModelDelegate: AnyObject {
+     var maximumBolus: Double { get }
+ 
+     var suspendThreshold: HKQuantity { get }
++
++    var isPumpConfigured: Bool { get }
+ }
+ 
+ class SimpleBolusViewModel: ObservableObject {
+@@ -179,6 +183,16 @@ class SimpleBolusViewModel: ObservableObject {
+         }
+     }
+     
++    @Published var selectedInsulinType: InsulinType = .novolog
++
++    var insulinTypePickerOptions: [InsulinType] {
++        return [.novolog, .humalog, .apidra, .fiasp, .lyumjev, .afrezza]
++    }
++
++    var isMDIMode: Bool {
++        return !delegate.isPumpConfigured
++    }
++    
+     private var carbQuantity: HKQuantity? = nil
+ 
+     private var manualGlucoseQuantity: HKQuantity? = nil {
+@@ -404,8 +418,13 @@ class SimpleBolusViewModel: ObservableObject {
+ 
+         func enactBolus() {
+             if let bolusVolume = bolus?.doubleValue(for: .internationalUnit()), bolusVolume > 0 {
+-                delegate.enactBolus(units: bolusVolume, activationType: .activationTypeFor(recommendedAmount: recommendation, bolusAmount: bolusVolume))
+-                dosingDecision?.manualBolusRequested = bolusVolume
++                if isMDIMode {
++                    delegate.addManuallyEnteredDose(startDate: Date(), units: bolusVolume, insulinType: selectedInsulinType)
++                    dosingDecision?.manualBolusRequested = bolusVolume
++                } else {
++                    delegate.enactBolus(units: bolusVolume, activationType: .activationTypeFor(recommendedAmount: recommendation, bolusAmount: bolusVolume))
++                    dosingDecision?.manualBolusRequested = bolusVolume
++                }
+             }
+         }
+         
+diff --git a/Loop/Loop/Views/BolusEntryView.swift b/Loop/Loop/Views/BolusEntryView.swift
+index 3a25576f..cf4e54b3 100644
+--- a/Loop/Loop/Views/BolusEntryView.swift
++++ b/Loop/Loop/Views/BolusEntryView.swift
+@@ -77,6 +77,12 @@ struct BolusEntryView: View {
+     }
+     
+     private var title: Text {
++        if viewModel.isMDIMode {
++            if viewModel.potentialCarbEntry == nil {
++                return Text("Log Dose", comment: "Title for MDI dose logging screen")
++            }
++            return Text("Meal Dose", comment: "Title for MDI dose logging screen when also entering carbs")
++        }
+         if viewModel.potentialCarbEntry == nil {
+             return Text("Bolus", comment: "Title for bolus entry screen")
+         }
+@@ -196,6 +202,10 @@ struct BolusEntryView: View {
+                 recommendedBolusRow
+             }
+ 
++            if viewModel.isMDIMode {
++                insulinTypePicker
++            }
++
+             bolusEntryRow
+         }
+     }
+@@ -276,6 +286,14 @@ struct BolusEntryView: View {
+             .foregroundColor(Color(.secondaryLabel))
+     }
+ 
++    private var insulinTypePicker: some View {
++        ExpandablePicker(
++            with: viewModel.insulinTypePickerOptions,
++            selectedValue: $viewModel.selectedInsulinType,
++            label: NSLocalizedString("Insulin Type", comment: "Insulin type label")
++        )
++    }
++
+     private var enteredBolusStringBinding: Binding<String> {
+         Binding(
+             get: { enteredBolusString },
+@@ -373,6 +391,10 @@ struct BolusEntryView: View {
+                     return Text("Enter Bolus", comment: "Button text to begin entering a bolus")
+                 case .deliver:
+                     return Text("Deliver", comment: "Button text to deliver a bolus")
++                case .logDose:
++                    return Text("Log Dose", comment: "Button text to log an MDI dose")
++                case .saveAndLogDose:
++                    return Text("Save Carbs & Log Dose", comment: "Button text to save carbs and log an MDI dose")
+                 }
+             }
+         )
+diff --git a/Loop/Loop/Views/SimpleBolusView.swift b/Loop/Loop/Views/SimpleBolusView.swift
+index 2374e69d..03d48660 100644
+--- a/Loop/Loop/Views/SimpleBolusView.swift
++++ b/Loop/Loop/Views/SimpleBolusView.swift
+@@ -115,6 +115,9 @@ struct SimpleBolusView: View {
+             glucoseEntryRow
+             recommendedBolusRow
+             bolusEntryRow
++            if viewModel.isMDIMode {
++                insulinTypePicker
++            }
+         }
+     }
+     
+@@ -234,6 +237,14 @@ struct SimpleBolusView: View {
+             .foregroundColor(Color(.secondaryLabel))
+     }
+ 
++    private var insulinTypePicker: some View {
++        ExpandablePicker(
++            with: viewModel.insulinTypePickerOptions,
++            selectedValue: $viewModel.selectedInsulinType,
++            label: NSLocalizedString("Insulin Type", comment: "Insulin type label")
++        )
++    }
++
+     private var actionArea: some View {
+         VStack(spacing: 0) {
+             if viewModel.isNoticeVisible {
+@@ -261,15 +272,28 @@ struct SimpleBolusView: View {
+                 }
+             },
+             label: {
+-                switch viewModel.actionButtonAction {
+-                case .saveWithoutBolusing:
+-                    return Text("Save without Bolusing", comment: "Button text to save carbs and/or manual glucose entry without a bolus")
+-                case .saveAndDeliver:
+-                    return Text("Save Carbs & Deliver", comment: "Button text to save carbs and/or manual glucose entry and deliver a bolus")
+-                case .enterBolus:
+-                    return Text("Enter Bolus", comment: "Button text to begin entering a bolus")
+-                case .deliver:
+-                    return Text("Deliver", comment: "Button text to deliver a bolus")
++                if viewModel.isMDIMode {
++                    switch viewModel.actionButtonAction {
++                    case .saveWithoutBolusing:
++                        return Text("Save without Bolusing", comment: "Button text to save carbs and/or manual glucose entry without a bolus")
++                    case .saveAndDeliver:
++                        return Text("Save Carbs & Log Dose", comment: "Button text to save carbs and/or manual glucose entry and log a dose")
++                    case .enterBolus:
++                        return Text("Enter Dose", comment: "Button text to begin entering a dose in MDI mode")
++                    case .deliver:
++                        return Text("Log Dose", comment: "Button text to log an MDI dose")
++                    }
++                } else {
++                    switch viewModel.actionButtonAction {
++                    case .saveWithoutBolusing:
++                        return Text("Save without Bolusing", comment: "Button text to save carbs and/or manual glucose entry without a bolus")
++                    case .saveAndDeliver:
++                        return Text("Save Carbs & Deliver", comment: "Button text to save carbs and/or manual glucose entry and deliver a bolus")
++                    case .enterBolus:
++                        return Text("Enter Bolus", comment: "Button text to begin entering a bolus")
++                    case .deliver:
++                        return Text("Deliver", comment: "Button text to deliver a bolus")
++                    }
+                 }
+             }
+         )
+@@ -385,6 +409,9 @@ struct SimpleBolusCalculatorView_Previews: PreviewProvider {
+         
+         func enactBolus(units: Double, activationType: BolusActivationType) {
+         }
++
++        func addManuallyEnteredDose(startDate: Date, units: Double, insulinType: InsulinType?) {
++        }
+         
+         func insulinOnBoard(at date: Date, completion: @escaping (DoseStoreResult<InsulinValue>) -> Void) {
+             completion(.success(InsulinValue(startDate: date, value: 2.0)))
+@@ -411,6 +438,10 @@ struct SimpleBolusCalculatorView_Previews: PreviewProvider {
+         var suspendThreshold: HKQuantity {
+             return HKQuantity(unit: .milligramsPerDeciliter, doubleValue: 75)
+         }
++
++        var isPumpConfigured: Bool {
++            return true
++        }
+     }
+ 
+     static var viewModel: SimpleBolusViewModel = SimpleBolusViewModel(delegate: MockSimpleBolusViewDelegate(), displayMealEntry: true)
+diff --git a/Loop/LoopTests/ViewModels/BolusEntryViewModelTests.swift b/Loop/LoopTests/ViewModels/BolusEntryViewModelTests.swift
+index 7f2c421e..8f42d506 100644
+--- a/Loop/LoopTests/ViewModels/BolusEntryViewModelTests.swift
++++ b/Loop/LoopTests/ViewModels/BolusEntryViewModelTests.swift
+@@ -915,6 +915,13 @@ fileprivate class MockBolusEntryViewModelDelegate: BolusEntryViewModelDelegate {
+         enactedBolusUnits = units
+         enactedBolusActivationType = activationType
+     }
++
++    var manuallyEnteredDoseUnits: Double?
++    var manuallyEnteredDoseInsulinType: InsulinType?
++    func addManuallyEnteredDose(startDate: Date, units: Double, insulinType: InsulinType?) {
++        manuallyEnteredDoseUnits = units
++        manuallyEnteredDoseInsulinType = insulinType
++    }
+     
+     var getGlucoseSamplesResponse: [StoredGlucoseSample] = []
+     func getGlucoseSamples(start: Date?, end: Date?, completion: @escaping (Swift.Result<[StoredGlucoseSample], Error>) -> Void) {

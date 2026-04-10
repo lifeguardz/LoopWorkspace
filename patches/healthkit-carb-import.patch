@@ -1,8 +1,17 @@
-diff --git a/Loop/Loop/View Models/CarbEntryViewModel.swift
-index 37dedee3..59c7d076 100644
+diff --git a/Loop/Loop/View Models/CarbEntryViewModel.swift b/Loop/Loop/View Models/CarbEntryViewModel.swift
+index 37dedee3..46714a33 100644
 --- a/Loop/Loop/View Models/CarbEntryViewModel.swift	
 +++ b/Loop/Loop/View Models/CarbEntryViewModel.swift	
-@@ -82,10 +82,20 @@ final class CarbEntryViewModel: ObservableObject {
+@@ -14,6 +14,8 @@ import Combine
+ protocol CarbEntryViewModelDelegate: AnyObject, BolusEntryViewModelDelegate {
+     var analyticsServicesManager: AnalyticsServicesManager { get }
+     var defaultAbsorptionTimes: CarbStore.DefaultAbsorptionTimes { get }
++    var healthStore: HKHealthStore { get }
++    var carbStore: CarbStore { get }
+ }
+ 
+ final class CarbEntryViewModel: ObservableObject {
+@@ -82,10 +84,20 @@ final class CarbEntryViewModel: ObservableObject {
      @Published var favoriteFoods = UserDefaults.standard.favoriteFoods
      @Published var selectedFavoriteFoodIndex = -1
      
@@ -23,7 +32,7 @@ index 37dedee3..59c7d076 100644
      /// Initalizer for when`CarbEntryView` is presented from the home screen
      init(delegate: CarbEntryViewModelDelegate) {
          self.delegate = delegate
-@@ -315,4 +325,14 @@ final class CarbEntryViewModel: ObservableObject {
+@@ -315,4 +327,14 @@ final class CarbEntryViewModel: ObservableObject {
              }
              .store(in: &cancellables)
      }
@@ -38,9 +47,74 @@ index 37dedee3..59c7d076 100644
 +        }
 +    }
  }
-diff --git a/Loop/Loop/View Models/HealthKitCarbImportViewModel.swift
+diff --git a/Loop/Loop/Views/CarbEntryView.swift b/Loop/Loop/Views/CarbEntryView.swift
+index 5831836f..8bc77cff 100644
+--- a/Loop/Loop/Views/CarbEntryView.swift
++++ b/Loop/Loop/Views/CarbEntryView.swift
+@@ -71,6 +71,10 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
+                 mainCard
+                     .padding(.top, 8)
+                 
++                if isNewEntry {
++                    healthKitImportButton
++                }
++                
+                 continueActionButton
+                 
+                 if isNewEntry, FeatureFlags.allowExperimentalFeatures {
+@@ -87,6 +91,21 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
+             }
+         }
+         .alert(item: $viewModel.alert, content: alert(for:))
++        .sheet(isPresented: $viewModel.showHealthKitImport) {
++            if let healthStore = viewModel.healthStore,
++               let carbStore = viewModel.carbStore {
++                let importViewModel = HealthKitCarbImportViewModel(
++                    healthStore: healthStore,
++                    carbStore: carbStore
++                )
++                HealthKitCarbImportView(viewModel: importViewModel)
++                    .onDisappear {
++                        if importViewModel.selectedCount > 0 {
++                            viewModel.handleHealthKitImportCompletion(successCount: importViewModel.selectedCount)
++                        }
++                    }
++            }
++        }
+         .sheet(isPresented: $showAddFavoriteFood, onDismiss: clearExpandedRow) {
+             AddEditFavoriteFoodView(carbsQuantity: $viewModel.carbsQuantity.wrappedValue, foodType: $viewModel.foodType.wrappedValue, absorptionTime: $viewModel.absorptionTime.wrappedValue, onSave: onFavoriteFoodSave(_:))
+         }
+@@ -298,18 +317,20 @@ extension CarbEntryView {
+         Button(action: viewModel.continueToBolus) {
+             Text("Continue", comment: "Button label for continue")
+         }
+-        .disabled(viewModel.continueButtonDisabled)
++    .disabled(viewModel.continueButtonDisabled)
+     }
+     
+-    private var continueActionButton: some View {
+-        Button(action: viewModel.continueToBolus) {
+-            Text("Continue", comment: "Button label for continue")
++    private var healthKitImportButton: some View {
++        Button(action: viewModel.openHealthKitImport) {
++            HStack {
++                Image(systemName: "arrow.down.doc.fill")
++                Text("Import from HealthKit")
++            }
++            .foregroundColor(.accentColor)
+         }
+         .buttonStyle(ActionButtonStyle())
+-        .padding()
+-        .disabled(viewModel.continueButtonDisabled)
++        .padding(.horizontal)
+     }
+-    
+ }
+ 
+ extension CarbEntryView {
+diff --git a/Loop/Loop/View Models/HealthKitCarbImportViewModel.swift b/Loop/Loop/View Models/HealthKitCarbImportViewModel.swift
 new file mode 100644
-index 00000000..0b0d51e1
+index 00000000..f648de3f
 --- /dev/null
 +++ b/Loop/Loop/View Models/HealthKitCarbImportViewModel.swift	
 @@ -0,0 +1,198 @@
@@ -114,7 +188,7 @@ index 00000000..0b0d51e1
 +                        return nil
 +                    }
 +                    
-+                    let grams = sample.quantity.doubleValue(for: .gram())
++                    let grams = quantitySample.quantity.doubleValue(for: .gram())
 +                    let sourceApp = sample.sourceRevision.source.name
 +                    let foodType = sample.metadata?[HKMetadataKeyFoodType] as? String
 +                    
@@ -242,67 +316,13 @@ index 00000000..0b0d51e1
 +        userInfo: [NSLocalizedDescriptionKey: "Failed to import carb entries"]
 +    )
 +}
-diff --git a/Loop/Loop/Views/CarbEntryView.swift b/Loop/Loop/Views/CarbEntryView.swift
-index 14c6b2c4..4ff1c059 100644
---- a/Loop/Loop/Views/CarbEntryView.swift
-+++ b/Loop/Loop/Views/CarbEntryView.swift
-@@ -71,6 +71,10 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
-                 mainCard
-                     .padding(.top, 8)
-                 
-+                if isNewEntry {
-+                    healthKitImportButton
-+                }
-+                
-                 continueActionButton
-                 
-                 if isNewEntry, FeatureFlags.allowExperimentalFeatures {
-@@ -87,6 +91,21 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
-             }
-         }
-         .alert(item: $viewModel.alert, content: alert(for:))
-+        .sheet(isPresented: $viewModel.showHealthKitImport) {
-+            if let healthStore = viewModel.healthStore,
-+               let carbStore = viewModel.carbStore {
-+                let importViewModel = HealthKitCarbImportViewModel(
-+                    healthStore: healthStore,
-+                    carbStore: carbStore
-+                )
-+                HealthKitCarbImportView(viewModel: importViewModel)
-+                    .onDisappear {
-+                        if importViewModel.selectedCount > 0 {
-+                            viewModel.handleHealthKitImportCompletion(successCount: importViewModel.selectedCount)
-+                        }
-+                    }
-+            }
-+        }
-         .sheet(isPresented: $showAddFavoriteFood, onDismiss: clearExpandedRow) {
-             AddEditFavoriteFoodView(carbsQuantity: $viewModel.carbsQuantity.wrappedValue, foodType: $viewModel.foodType.wrappedValue, absorptionTime: $viewModel.absorptionTime.wrappedValue, onSave: onFavoriteFoodSave(_:))
-         }
-@@ -310,6 +329,17 @@ extension CarbEntryView {
-         .disabled(viewModel.continueButtonDisabled)
-     }
-     
-+    private var healthKitImportButton: some View {
-+        Button(action: viewModel.openHealthKitImport) {
-+            HStack {
-+                Image(systemName: "arrow.down.doc.fill")
-+                Text("Import from HealthKit")
-+            }
-+            .foregroundColor(.accentColor)
-+        }
-+        .buttonStyle(ActionButtonStyle())
-+        .padding(.horizontal)
-+    }
- }
- 
- extension CarbEntryView {
+\ No newline at end of file
 diff --git a/Loop/Loop/Views/HealthKitCarbImportView.swift b/Loop/Loop/Views/HealthKitCarbImportView.swift
 new file mode 100644
-index 00000000..bfbe4c57
+index 00000000..b81972ed
 --- /dev/null
 +++ b/Loop/Loop/Views/HealthKitCarbImportView.swift
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,231 @@
 +//
 +//  HealthKitCarbImportView.swift
 +//  Loop
@@ -534,12 +554,4 @@ index 00000000..bfbe4c57
 +        .padding(.vertical, 4)
 +    }
 +}
-+
-+#Preview {
-+    HealthKitCarbImportView(
-+        viewModel: HealthKitCarbImportViewModel(
-+            healthStore: HKHealthStore(),
-+            carbStore: CarbStore()
-+        )
-+    )
-+}
+\ No newline at end of file

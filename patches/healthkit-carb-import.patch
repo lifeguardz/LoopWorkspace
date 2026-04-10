@@ -319,10 +319,10 @@ index 00000000..f648de3f
 \ No newline at end of file
 diff --git a/Loop/Loop/Views/HealthKitCarbImportView.swift b/Loop/Loop/Views/HealthKitCarbImportView.swift
 new file mode 100644
-index 00000000..b81972ed
+index 00000000..14613d25
 --- /dev/null
 +++ b/Loop/Loop/Views/HealthKitCarbImportView.swift
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,239 @@
 +//
 +//  HealthKitCarbImportView.swift
 +//  Loop
@@ -337,17 +337,17 @@ index 00000000..b81972ed
 +struct HealthKitCarbImportView: View {
 +    @Environment(\.dismiss) private var dismiss
 +    @ObservedObject var viewModel: HealthKitCarbImportViewModel
-+    
++
 +    @State private var showConfirmation = false
 +    @State private var importResult: Result<Int, Error>?
-+    
++
 +    private let dateFormatter: DateFormatter = {
 +        let formatter = DateFormatter()
 +        formatter.dateStyle = .medium
 +        formatter.timeStyle = .short
 +        return formatter
 +    }()
-+    
++
 +    var body: some View {
 +        NavigationView {
 +            Group {
@@ -370,7 +370,7 @@ index 00000000..b81972ed
 +                        dismiss()
 +                    }
 +                }
-+                
++
 +                ToolbarItem(placement: .navigationBarTrailing) {
 +                    Button("Import") {
 +                        showConfirmation = true
@@ -408,26 +408,31 @@ index 00000000..b81972ed
 +            }
 +        }
 +    }
-+    
++
 +    @ViewBuilder
 +    private var emptyStateView: some View {
-+        ContentUnavailableView {
-+            Label {
-+                Text("No Carb Entries Found")
-+            } icon: {
-+                Image(systemName: "fork.knife")
-+            }
-+        } description: {
++        VStack(spacing: 16) {
++            Image(systemName: "fork.knife")
++                .font(.system(size: 40))
++                .foregroundColor(.secondary)
++            Text("No Carb Entries Found")
++                .font(.title2)
++                .fontWeight(.semibold)
 +            Text("No carb entries from external apps were found in the last 24 hours.")
++                .font(.body)
++                .foregroundColor(.secondary)
++                .multilineTextAlignment(.center)
++                .padding(.horizontal)
 +        }
++        .frame(maxWidth: .infinity, maxHeight: .infinity)
 +    }
-+    
++
 +    @ViewBuilder
 +    private var loadingView: some View {
 +        ProgressView("Loading carb entries...")
 +            .frame(maxWidth: .infinity, maxHeight: .infinity)
 +    }
-+    
++
 +    @ViewBuilder
 +    private func contentView(_ entries: [HealthKitCarbEntry]) -> some View {
 +        Group {
@@ -447,29 +452,29 @@ index 00000000..b81972ed
 +                    }
 +                }
 +                .listStyle(.insetGrouped)
-+                
++
 +                if viewModel.hasSelectedEntries {
 +                    selectionSummaryView
 +                }
 +            }
 +        }
 +    }
-+    
++
 +    private var selectionSummaryView: some View {
 +        VStack(spacing: 8) {
 +            Divider()
-+            
++
 +            HStack {
 +                Text("\(viewModel.selectedCount) entr\(viewModel.selectedCount == 1 ? "y" : "ies") selected")
 +                    .font(.headline)
-+                
++
 +                Spacer()
-+                
++
 +                Button("Select All") {
 +                    viewModel.selectAll()
 +                }
 +                .font(.caption)
-+                
++
 +                Button("Clear") {
 +                    viewModel.deselectAll()
 +                }
@@ -480,25 +485,28 @@ index 00000000..b81972ed
 +            .background(Color(.systemBackground))
 +        }
 +    }
-+    
++
 +    @ViewBuilder
 +    private func errorView(_ error: Error) -> some View {
-+        ContentUnavailableView {
-+            Label {
-+                Text("Error Loading Entries")
-+            } icon: {
-+                Image(systemName: "exclamationmark.triangle")
-+                    .foregroundColor(.critical)
-+            }
-+        } description: {
++        VStack(spacing: 16) {
++            Image(systemName: "exclamationmark.triangle")
++                .font(.system(size: 40))
++                .foregroundColor(.red)
++            Text("Error Loading Entries")
++                .font(.title2)
++                .fontWeight(.semibold)
 +            Text(error.localizedDescription)
-+        } actions: {
++                .font(.body)
++                .foregroundColor(.secondary)
++                .multilineTextAlignment(.center)
++                .padding(.horizontal)
 +            Button("Retry") {
 +                viewModel.fetchCarbEntries()
 +            }
 +        }
++        .frame(maxWidth: .infinity, maxHeight: .infinity)
 +    }
-+    
++
 +    private func performImport() {
 +        viewModel.importSelected { result in
 +            importResult = result
@@ -511,14 +519,14 @@ index 00000000..b81972ed
 +    let isSelected: Bool
 +    let dateFormatter: DateFormatter
 +    let onToggle: () -> Void
-+    
++
 +    private let gramsFormatter: NumberFormatter = {
 +        let formatter = NumberFormatter()
 +        formatter.numberStyle = .decimal
 +        formatter.maximumFractionDigits = 0
 +        return formatter
 +    }()
-+    
++
 +    var body: some View {
 +        HStack(spacing: 12) {
 +            Toggle(isOn: Binding(
@@ -530,20 +538,20 @@ index 00000000..b81972ed
 +                        Text("\(gramsFormatter.string(from: NSNumber(value: entry.grams)) ?? "\(Int(entry.grams))")g")
 +                            .font(.title2)
 +                            .fontWeight(.semibold)
-+                        
++
 +                        Spacer()
 +                    }
-+                    
++
 +                    Text(dateFormatter.string(from: entry.date))
 +                        .font(.caption)
 +                        .foregroundColor(.secondary)
-+                    
++
 +                    if let foodType = entry.foodType, !foodType.isEmpty {
 +                        Text(foodType)
 +                            .font(.caption)
 +                            .foregroundColor(.secondary)
 +                    }
-+                    
++
 +                    Text(entry.sourceApp)
 +                        .font(.caption2)
 +                        .foregroundColor(.tertiary)

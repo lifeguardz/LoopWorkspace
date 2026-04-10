@@ -48,7 +48,7 @@ index 37dedee3..46714a33 100644
 +    }
  }
 diff --git a/Loop/Loop/Views/CarbEntryView.swift b/Loop/Loop/Views/CarbEntryView.swift
-index 5831836f..8bc77cff 100644
+index 5831836f..2c7e5c7a 100644
 --- a/Loop/Loop/Views/CarbEntryView.swift
 +++ b/Loop/Loop/Views/CarbEntryView.swift
 @@ -71,6 +71,10 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
@@ -84,17 +84,10 @@ index 5831836f..8bc77cff 100644
          .sheet(isPresented: $showAddFavoriteFood, onDismiss: clearExpandedRow) {
              AddEditFavoriteFoodView(carbsQuantity: $viewModel.carbsQuantity.wrappedValue, foodType: $viewModel.foodType.wrappedValue, absorptionTime: $viewModel.absorptionTime.wrappedValue, onSave: onFavoriteFoodSave(_:))
          }
-@@ -298,18 +317,20 @@ extension CarbEntryView {
-         Button(action: viewModel.continueToBolus) {
-             Text("Continue", comment: "Button label for continue")
-         }
--        .disabled(viewModel.continueButtonDisabled)
-+    .disabled(viewModel.continueButtonDisabled)
+@@ -310,6 +329,18 @@ extension CarbEntryView {
+         .disabled(viewModel.continueButtonDisabled)
      }
      
--    private var continueActionButton: some View {
--        Button(action: viewModel.continueToBolus) {
--            Text("Continue", comment: "Button label for continue")
 +    private var healthKitImportButton: some View {
 +        Button(action: viewModel.openHealthKitImport) {
 +            HStack {
@@ -102,13 +95,11 @@ index 5831836f..8bc77cff 100644
 +                Text("Import from HealthKit")
 +            }
 +            .foregroundColor(.accentColor)
-         }
-         .buttonStyle(ActionButtonStyle())
--        .padding()
--        .disabled(viewModel.continueButtonDisabled)
++        }
++        .buttonStyle(ActionButtonStyle())
 +        .padding(.horizontal)
-     }
--    
++    }
++    
  }
  
  extension CarbEntryView {
@@ -227,7 +218,7 @@ index 00000000..f648de3f
 +        selectedEntryIDs.removeAll()
 +    }
 +    
-+    func importSelected(completion: @escaping (Result<Int, Error>) -> Void) {
++    func importSelected(completion: @escaping (Swift.Result<Int, Error>) -> Void) {
 +        guard case .loaded(let entries) = state else {
 +            completion(.failure(NSError.noEntriesFound))
 +            return
@@ -316,7 +307,6 @@ index 00000000..f648de3f
 +        userInfo: [NSLocalizedDescriptionKey: "Failed to import carb entries"]
 +    )
 +}
-\ No newline at end of file
 diff --git a/Loop/Loop/Views/HealthKitCarbImportView.swift b/Loop/Loop/Views/HealthKitCarbImportView.swift
 new file mode 100644
 index 00000000..14613d25
@@ -339,7 +329,8 @@ index 00000000..14613d25
 +    @ObservedObject var viewModel: HealthKitCarbImportViewModel
 +
 +    @State private var showConfirmation = false
-+    @State private var importResult: Result<Int, Error>?
++    @State private var showResultAlert = false
++    @State private var importResult: Swift.Result<Int, Error>?
 +
 +    private let dateFormatter: DateFormatter = {
 +        let formatter = DateFormatter()
@@ -389,7 +380,7 @@ index 00000000..14613d25
 +            } message: {
 +                Text("Import \(viewModel.selectedCount) carb entr\(viewModel.selectedCount == 1 ? "y" : "ies") into Loop?")
 +            }
-+            .alert("Import Result", isPresented: .constant(importResult != nil)) {
++            .alert("Import Result", isPresented: $showResultAlert) {
 +                Button("OK") {
 +                    if case .success = importResult {
 +                        dismiss()
@@ -510,6 +501,7 @@ index 00000000..14613d25
 +    private func performImport() {
 +        viewModel.importSelected { result in
 +            importResult = result
++            showResultAlert = true
 +        }
 +    }
 +}
@@ -562,4 +554,3 @@ index 00000000..14613d25
 +        .padding(.vertical, 4)
 +    }
 +}
-\ No newline at end of file

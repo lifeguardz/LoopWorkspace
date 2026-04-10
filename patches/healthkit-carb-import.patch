@@ -1,7 +1,7 @@
-diff --git a/Loop/View Models/CarbEntryViewModel.swift b/Loop/View Models/CarbEntryViewModel.swift
+diff --git a/Loop/Loop/View Models/CarbEntryViewModel.swift
 index 37dedee3..59c7d076 100644
---- a/Loop/View Models/CarbEntryViewModel.swift	
-+++ b/Loop/View Models/CarbEntryViewModel.swift	
+--- a/Loop/Loop/View Models/CarbEntryViewModel.swift	
++++ b/Loop/Loop/View Models/CarbEntryViewModel.swift	
 @@ -82,10 +82,20 @@ final class CarbEntryViewModel: ObservableObject {
      @Published var favoriteFoods = UserDefaults.standard.favoriteFoods
      @Published var selectedFavoriteFoodIndex = -1
@@ -38,11 +38,11 @@ index 37dedee3..59c7d076 100644
 +        }
 +    }
  }
-diff --git a/Loop/View Models/HealthKitCarbImportViewModel.swift b/Loop/View Models/HealthKitCarbImportViewModel.swift
+diff --git a/Loop/Loop/View Models/HealthKitCarbImportViewModel.swift
 new file mode 100644
 index 00000000..0b0d51e1
 --- /dev/null
-+++ b/Loop/View Models/HealthKitCarbImportViewModel.swift	
++++ b/Loop/Loop/View Models/HealthKitCarbImportViewModel.swift	
 @@ -0,0 +1,198 @@
 +//
 +//  HealthKitCarbImportViewModel.swift
@@ -242,10 +242,10 @@ index 00000000..0b0d51e1
 +        userInfo: [NSLocalizedDescriptionKey: "Failed to import carb entries"]
 +    )
 +}
-diff --git a/Loop/Views/CarbEntryView.swift b/Loop/Views/CarbEntryView.swift
+diff --git a/Loop/Loop/Views/CarbEntryView.swift b/Loop/Loop/Views/CarbEntryView.swift
 index 14c6b2c4..4ff1c059 100644
---- a/Loop/Views/CarbEntryView.swift
-+++ b/Loop/Views/CarbEntryView.swift
+--- a/Loop/Loop/Views/CarbEntryView.swift
++++ b/Loop/Loop/Views/CarbEntryView.swift
 @@ -71,6 +71,10 @@ struct CarbEntryView: View, HorizontalSizeClassOverride {
                  mainCard
                      .padding(.top, 8)
@@ -297,11 +297,11 @@ index 14c6b2c4..4ff1c059 100644
  }
  
  extension CarbEntryView {
-diff --git a/Loop/Views/HealthKitCarbImportView.swift b/Loop/Views/HealthKitCarbImportView.swift
+diff --git a/Loop/Loop/Views/HealthKitCarbImportView.swift b/Loop/Loop/Views/HealthKitCarbImportView.swift
 new file mode 100644
 index 00000000..bfbe4c57
 --- /dev/null
-+++ b/Loop/Views/HealthKitCarbImportView.swift
++++ b/Loop/Loop/Views/HealthKitCarbImportView.swift
 @@ -0,0 +1,240 @@
 +//
 +//  HealthKitCarbImportView.swift
